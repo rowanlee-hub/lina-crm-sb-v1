@@ -57,10 +57,16 @@ function LiffSyncContent() {
 
         setStatus("Success! Opening chat...");
         
-        // Wait 1 second to show success, then redirect to the Bot Chat or close
+        // Wait 1 second to show success, then redirect to the Bot Chat
         setTimeout(() => {
            if (botBasicId) {
+              // Try to open the profile page directly in LINE
               window.location.href = `https://line.me/R/ti/p/${botBasicId}`;
+              
+              // Fallback just in case window.location is blocked by some browsers inside LINE
+              setTimeout(() => {
+                 liff.closeWindow();
+              }, 2000);
            } else {
               liff.closeWindow();
            }
