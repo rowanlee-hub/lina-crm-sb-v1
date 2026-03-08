@@ -26,10 +26,25 @@ function LiffSyncContent() {
           throw new Error("Missing NEXT_PUBLIC_SCRIPT_URL in Vercel Environment Variables.");
         }
 
-        // DEBUG CHECK 2: URL Parameters
-        const email = searchParams.get('email');
+        // DEBUG CHECK 2: URL Parameters (Using raw window location to bypass Next.js stripping)
+        let email = "";
+        try {
+          // LIFF sometimes puts the real URL inside liff.getContext().endpointUrl
+          const context = liff.getContext();
+          const rawUrl = context?.endpointUrl || window.location.href;
+          const urlParams = new URL(rawUrl).searchParams;
+          email = urlParams.get('email') || "";
+          
+          if (!email && window.location.search) {
+             email = new URLSearchParams(window.location.search).get('email') || "";
+          }
+        } catch (e) {
+           console.error("URL parsing failed", e);
+        }
+
         if (!email) {
-          throw new Error("No email found in the URL. Ensure GoHighLevel is passing ?email={{contact.email}}");
+          setDebugInfo(`Raw URL was: ${window.location.href}`);
+          throw new Error("No secure token (email) found in URL.");
         }
 
         setStatus(`Step 2: Authenticating ${email} via LINE...`);
