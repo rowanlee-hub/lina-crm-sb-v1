@@ -48,11 +48,16 @@ function LiffSyncContent() {
            bodyParams.append("lineId", lineId);
            bodyParams.append("name", profile.displayName || "");
 
-           await fetch(scriptUrl, {
+           const response = await fetch(scriptUrl, {
               method: "POST",
-              mode: "no-cors", // Apps Script doesn't handle CORS preflights well, no-cors is safer for one-way sync
               body: bodyParams
-           }).catch(err => console.error("Sync fetch error:", err));
+           });
+           
+           const data = await response.json().catch(() => null);
+           
+           if (!response.ok || (data && !data.success)) {
+             throw new Error(data?.error || `Server responded with status: ${response.status}`);
+           }
         }
 
         setStatus("Success! Opening chat...");
