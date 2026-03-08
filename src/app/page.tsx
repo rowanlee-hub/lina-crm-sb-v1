@@ -12,7 +12,7 @@ import {
 // ============================================================================
 // BACKEND URLS
 // ============================================================================
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyI7QLJ8E39oZJ8DuCxoCU1qf8HNxs5_tdYA5RbH8SHTNl9tk-CPxnjnWL0XdeUt9IaLw/exec";
+const SCRIPT_URL = process.env.NEXT_PUBLIC_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbyI7QLJ8E39oZJ8DuCxoCU1qf8HNxs5_tdYA5RbH8SHTNl9tk-CPxnjnWL0XdeUt9IaLw/exec";
 const INTERNAL_API_URL = "/api/line/send";
 
 const getAllUniqueTags = (contacts: any[]) => {
