@@ -40,17 +40,18 @@ function LiffSyncContent() {
         const profile = await liff.getProfile();
         const lineId = profile.userId;
 
-        // Post data to Apps Script directly from the client
+        // Post data to Apps Script using URLSearchParams for correct form-encoding
         if (scriptUrl) {
+           const bodyParams = new URLSearchParams();
+           bodyParams.append("action", "liff_sync");
+           bodyParams.append("email", email);
+           bodyParams.append("lineId", lineId);
+           bodyParams.append("name", profile.displayName || "");
+
            await fetch(scriptUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: JSON.stringify({
-                 action: "liff_sync",
-                 email: email,
-                 lineId: lineId,
-                 name: profile.displayName
-              })
+              mode: "no-cors", // Apps Script doesn't handle CORS preflights well, no-cors is safer for one-way sync
+              body: bodyParams
            }).catch(err => console.error("Sync fetch error:", err));
         }
 
