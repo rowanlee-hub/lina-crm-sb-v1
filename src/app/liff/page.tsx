@@ -102,7 +102,7 @@ function LiffSyncContent() {
              <img src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" alt="LINE" className="w-10 h-10" />
           </div>
           
-          <h1 className="text-xl font-bold text-slate-800 tracking-tight">Accessing Reward</h1>
+          <h1 className="text-xl font-bold text-slate-800 tracking-tight">VERIFYING CONNECTION</h1>
           
           {error ? (
              <div className="text-left bg-red-50 p-4 rounded-xl border border-red-200">
@@ -133,15 +133,18 @@ function LiffSyncContent() {
   );
 }
 
+export const dynamic = 'force-dynamic';
+
 export default function LiffAppPage() {
    return (
       <Suspense fallback={
         <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-50">
            <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-           <p className="text-sm text-slate-500 font-medium">Loading secure environment...</p>
+           <p className="text-sm text-slate-500 font-medium">Vercel is connecting...</p>
         </div>
       }>
          <LiffSyncContent />
       </Suspense>
    );
 }
+
