@@ -28,23 +28,36 @@ function LiffSyncContent() {
 
         // DEBUG CHECK 2: URL Parameters (Using raw window location to bypass Next.js stripping)
         let email = "";
+        let rawUrlForDebug = "";
         try {
           // LIFF sometimes puts the real URL inside liff.getContext().endpointUrl
           const context = liff.getContext();
-          const rawUrl = context?.endpointUrl || window.location.href;
-          const urlParams = new URL(rawUrl).searchParams;
+          rawUrlForDebug = context?.endpointUrl || window.location.href;
+          
+          // Method 1: Standard URL Params
+          const urlParams = new URL(rawUrlForDebug).searchParams;
           email = urlParams.get('email') || "";
           
+          // Method 2: Window Location Search
           if (!email && window.location.search) {
              email = new URLSearchParams(window.location.search).get('email') || "";
+          }
+          
+          // Method 3: Aggressive Regex Fallback (in case LINE mangled the ? syntax)
+          if (!email) {
+             const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi;
+             const matches = rawUrlForDebug.match(emailRegex);
+             if (matches && matches.length > 0) {
+                 email = matches[0];
+             }
           }
         } catch (e) {
            console.error("URL parsing failed", e);
         }
 
         if (!email) {
-          setDebugInfo(`Raw URL was: ${window.location.href}`);
-          throw new Error("No secure token (email) found in URL.");
+          setDebugInfo(`Raw URL was: ${rawUrlForDebug}`);
+          throw new Error("No secure token (email) found in URL. URL was logged.");
         }
 
         setStatus(`Step 2: Authenticating ${email} via LINE...`);
