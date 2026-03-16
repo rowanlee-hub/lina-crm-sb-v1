@@ -14,6 +14,7 @@ import {
 // ============================================================================
 const SCRIPT_URL = process.env.NEXT_PUBLIC_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbyI7QLJ8E39oZJ8DuCxoCU1qf8HNxs5_tdYA5RbH8SHTNl9tk-CPxnjnWL0XdeUt9IaLw/exec";
 const INTERNAL_API_URL = "/api/line/send";
+const CONTACTS_API = "/api/contacts"; // New Supabase API
 
 const getAllUniqueTags = (contacts: any[]) => {
   const tagsSet = new Set();
@@ -45,20 +46,14 @@ export default function CRMDashboard() {
     setIsLoading(true);
     setFetchError("");
     try {
-      if (!SCRIPT_URL || SCRIPT_URL.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
-        setFetchError("Please set your SCRIPT_URL to fetch real data.");
-        setIsLoading(false);
-        return;
-      }
-      
-      const response = await fetch(SCRIPT_URL);
-      if (!response.ok) throw new Error("Failed to fetch data");
+      const response = await fetch(CONTACTS_API);
+      if (!response.ok) throw new Error("Failed to fetch data from Supabase backend");
       
       const data = await response.json();
       setContacts(data);
     } catch (error) {
       console.error("Error fetching contacts:", error);
-      setFetchError("Failed to load contacts from Google Sheets. Please check your URL.");
+      setFetchError("Failed to load contacts from the database. Please check your Supabase connection.");
     } finally {
       setIsLoading(false);
     }
@@ -204,7 +199,7 @@ export default function CRMDashboard() {
                    {isLoading ? (
                       <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-4">
                         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-                        <p className="text-sm font-medium">Loading contacts from Google Sheets...</p>
+                        <p className="text-sm font-medium">Loading contacts from the database...</p>
                       </div>
                    ) : fetchError ? (
                       <div className="text-center py-12 text-red-500 bg-red-50 rounded-xl border border-red-200 p-8 max-w-lg mx-auto">
@@ -401,9 +396,9 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
 
     try {
       const payload = { ...contactPayload };
-      const response = await fetch(scriptUrl, {
+      const response = await fetch(CONTACTS_API, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
       
@@ -425,7 +420,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
       }
     } catch (error) {
       console.error("Save Error:", error);
-      setSaveError("Failed to save. Please make sure your Google Apps Script is deployed properly.");
+      setSaveError("Failed to save. Please make sure your Supabase project is configured properly.");
     } finally {
       setIsSaving(false);
     }
