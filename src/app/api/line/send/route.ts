@@ -54,11 +54,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, message: "Pushed successfully" });
 
-  } catch (error: any) {
-    console.error("Internal API Error:", error);
-    return NextResponse.json(
-      { success: false, error: 'Internal Server Error' },
-      { status: 500 }
-    );
-  }
+   } catch (error: unknown) {
+      console.error("LINE Messaging API Error:", error);
+      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+   }
 }

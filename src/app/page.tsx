@@ -16,18 +16,41 @@ const SCRIPT_URL = process.env.NEXT_PUBLIC_SCRIPT_URL || "https://script.google.
 const INTERNAL_API_URL = "/api/line/send";
 const CONTACTS_API = "/api/contacts"; // New Supabase API
 
-const getAllUniqueTags = (contacts: any[]) => {
-  const tagsSet = new Set();
-  contacts.forEach(c => (c.tags || []).forEach((t: any) => tagsSet.add(t)));
-  return Array.from(tagsSet).sort() as string[];
+interface HistoryItem {
+  id?: string;
+  date?: string;
+  action: string;
+}
+
+interface Contact {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  lineId: string;
+  tags: string[];
+  status: string;
+  webinar: {
+    link: string;
+    dateTime: string;
+  };
+  history?: HistoryItem[];
+}
+
+const getAllUniqueTags = (contacts: Contact[]): string[] => {
+  const tagsSet = new Set<string>();
+  contacts.forEach(c => {
+    if (c.tags) c.tags.forEach(t => tagsSet.add(t));
+  });
+  return Array.from(tagsSet).sort();
 };
 
 export default function CRMDashboard() {
   const [activeTab, setActiveTab] = useState("contacts"); // 'contacts' | 'conversations'
   const [view, setView] = useState("list"); // 'list' | 'detail' | 'add'
-  const [contacts, setContacts] = useState<any[]>([]);
-  const [selectedContactId, setSelectedContactId] = useState("");
-  
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+
   // API States
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
@@ -48,8 +71,8 @@ export default function CRMDashboard() {
     try {
       const response = await fetch(CONTACTS_API);
       if (!response.ok) throw new Error("Failed to fetch data from Supabase backend");
-      
-      const data = await response.json();
+
+      const data: Contact[] = await response.json();
       setContacts(data);
     } catch (error) {
       console.error("Error fetching contacts:", error);
@@ -63,13 +86,13 @@ export default function CRMDashboard() {
 
   // Apply filters
   const filteredContacts = contacts.filter(contact => {
-    const matchesSearch = 
+    const matchesSearch =
       contact.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       contact.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       contact.lineId?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesTag = selectedTagFilter === "All" || contact.tags?.includes(selectedTagFilter);
-    
+
     return matchesSearch && matchesTag;
   });
 
@@ -80,16 +103,16 @@ export default function CRMDashboard() {
 
   const handleBackToList = () => {
     setView("list");
-    setSelectedContactId("");
+    setSelectedContactId(null);
   };
 
   const handleAddClick = () => {
-    setSelectedContactId("");
+    setSelectedContactId(null);
     setView("add");
   };
 
   const isNew = view === "add";
-  const activeContact = isNew 
+  const activeContact: Contact = isNew
     ? {
         id: "",
         name: "",
@@ -101,7 +124,17 @@ export default function CRMDashboard() {
         webinar: { link: "", dateTime: "" },
         history: []
       }
-    : (contacts.find(c => c.id === selectedContactId) || {});
+    : (contacts.find(c => c.id === selectedContactId) || {
+        id: "",
+        name: "",
+        email: "",
+        phone: "",
+        lineId: "",
+        tags: [],
+        status: "Lead",
+        webinar: { link: "", dateTime: "" },
+        history: []
+      });
 
   // Render Main Layout
   return (
@@ -115,14 +148,14 @@ export default function CRMDashboard() {
           <span className="text-xl font-bold tracking-tight text-white">Zenith CRM</span>
         </div>
         <div className="flex space-x-2 bg-[#2d3343] p-1 rounded-lg">
-          <button 
-            onClick={() => setActiveTab("contacts")} 
+          <button
+            onClick={() => setActiveTab("contacts")}
             className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${activeTab === 'contacts' ? 'bg-blue-600 shadow-sm text-white' : 'text-slate-300 hover:text-white hover:bg-slate-700/50'}`}
           >
             Contacts
           </button>
-          <button 
-            onClick={() => setActiveTab("conversations")} 
+          <button
+            onClick={() => setActiveTab("conversations")}
             className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${activeTab === 'conversations' ? 'bg-blue-600 shadow-sm text-white' : 'text-slate-300 hover:text-white hover:bg-slate-700/50'}`}
           >
             Conversations
@@ -145,12 +178,12 @@ export default function CRMDashboard() {
                      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Contacts List</h1>
                      <p className="text-sm text-slate-500 font-medium">Manage all your synced contacts ({filteredContacts.length})</p>
                    </div>
-                   
+
                    <div className="flex w-full sm:w-auto items-center space-x-3 h-10">
                      <div className="relative flex-1 sm:w-64 h-full">
                        <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                       <input 
-                         type="text" 
+                       <input
+                         type="text"
                          value={searchQuery}
                          onChange={(e) => setSearchQuery(e.target.value)}
                          className="w-full h-full pl-9 pr-4 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
@@ -159,7 +192,7 @@ export default function CRMDashboard() {
                      </div>
 
                      <div className="relative h-full">
-                       <button 
+                       <button
                          onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
                          className="h-full px-4 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-lg text-sm font-medium transition-all flex items-center space-x-2"
                        >
@@ -185,7 +218,7 @@ export default function CRMDashboard() {
                        )}
                      </div>
 
-                     <button 
+                     <button
                        onClick={handleAddClick}
                        className="h-full px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm hover:shadow transition-all flex items-center space-x-1"
                      >
@@ -215,7 +248,7 @@ export default function CRMDashboard() {
                              <User className="h-12 w-12 mx-auto text-slate-300 mb-3" />
                              <p>{searchQuery || selectedTagFilter !== "All" ? "No contacts found matching your criteria" : "Your contact list is empty. Add a new contact!"}</p>
                              {(searchQuery || selectedTagFilter !== "All") && (
-                                <button 
+                                <button
                                   onClick={() => {setSearchQuery(""); setSelectedTagFilter("All");}}
                                   className="mt-3 text-sm text-blue-600 font-medium hover:underline"
                                 >
@@ -225,8 +258,8 @@ export default function CRMDashboard() {
                            </div>
                          ) : (
                            filteredContacts.map(contact => (
-                             <div 
-                               key={contact.id} 
+                             <div
+                               key={contact.id}
                                onClick={() => handleContactClick(contact.id)}
                                className="group bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer flex items-center justify-between"
                              >
@@ -234,7 +267,7 @@ export default function CRMDashboard() {
                                  <div className="h-12 w-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-700 font-bold text-lg group-hover:bg-blue-100 transition-colors shrink-0">
                                    {contact.name ? contact.name.charAt(0).toUpperCase() : "?"}
                                  </div>
-                                 
+
                                  <div>
                                    <h3 className="text-base font-bold text-slate-900 group-hover:text-blue-700 transition-colors">{contact.name || "Unnamed"}</h3>
                                    <div className="flex flex-col sm:flex-row sm:items-center text-xs text-slate-500 mt-1 sm:space-x-3 space-y-1 sm:space-y-0">
@@ -269,14 +302,14 @@ export default function CRMDashboard() {
              </div>
            ) : (
              <div className="flex-1 w-full overflow-y-auto">
-                <ContactDetailView 
-                  contactData={activeContact} 
+                <ContactDetailView
+                  contactData={activeContact}
                   onBack={handleBackToList}
                   isNew={isNew}
                   scriptUrl={SCRIPT_URL}
                   allContacts={contacts}
                   onSwitchContact={handleContactClick}
-                  onSaveSuccess={(updatedContact: any) => {
+                  onSaveSuccess={(updatedContact: Contact) => {
                     const existsIndex = contacts.findIndex(c => c.id === updatedContact.id);
                     if (existsIndex > -1) {
                       const newContacts = [...contacts];
@@ -292,10 +325,10 @@ export default function CRMDashboard() {
              </div>
            )
         ) : (
-          <ConversationsView 
+          <ConversationsView
             contacts={contacts}
             scriptUrl={SCRIPT_URL}
-            onUpdateContact={(updatedContact: any) => {
+            onUpdateContact={(updatedContact: Contact) => {
               const existsIndex = contacts.findIndex(c => c.id === updatedContact.id);
               if (existsIndex > -1) {
                 const newContacts = [...contacts];
@@ -313,20 +346,30 @@ export default function CRMDashboard() {
 // ----------------------------------------------------------------------------
 // Single Contact Detail View Component
 // ----------------------------------------------------------------------------
-function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUrl, allContacts, onSwitchContact }: any) {
-  const safeContactData = {
+interface ContactDetailViewProps {
+  contactData: Contact;
+  onBack: () => void;
+  onSaveSuccess: (updatedContact: Contact) => void;
+  isNew: boolean;
+  scriptUrl: string;
+  allContacts: Contact[];
+  onSwitchContact: (id: string) => void;
+}
+
+function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUrl, allContacts, onSwitchContact }: ContactDetailViewProps) {
+  const safeContactData: Contact = {
       ...contactData,
       tags: contactData.tags || [],
       webinar: contactData.webinar || { link: "", dateTime: "" },
       status: contactData.status || "Lead",
       history: contactData.history || []
-  }
-  const [contact, setContact] = useState(safeContactData);
+  };
+  const [contact, setContact] = useState<Contact>(safeContactData);
   const [newTag, setNewTag] = useState("");
-  
+
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(isNew);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  
+
   const [copiedField, setCopiedField] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -338,7 +381,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
   // LINE Messaging States
   const [lineMessageText, setLineMessageText] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [messageFeedback, setMessageFeedback] = useState({ type: "", text: "" });
+  const [messageFeedback, setMessageFeedback] = useState<{ type: string; text: string }>({ type: "", text: "" });
 
   useEffect(() => {
     // Also reset form state if contactData changes (switched contact via search)
@@ -384,7 +427,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
     }
   };
 
-  const handleSaveAndSync = async (contactPayload = contact) => {
+  const handleSaveAndSync = async (contactPayload: Contact = contact) => {
     if (scriptUrl.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
         setSaveError("Please set your SCRIPT_URL to save data.");
         return;
@@ -401,15 +444,15 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
          setHasUnsavedChanges(false);
-         const savedContact = { 
-            ...contactPayload, 
+         const savedContact: Contact = {
+            ...contactPayload,
             id: result.id || contactPayload.id,
-            history: result.history || contactPayload.history 
+            history: result.history || contactPayload.history
          };
          setSaveSuccess(result.message || "Saved successfully!");
          onSaveSuccess(savedContact);
@@ -456,15 +499,15 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
       if (response.ok && data.success) {
         setMessageFeedback({ type: "success", text: "Delivered via LINE API!" });
         setLineMessageText("");
-        
+
         // Auto-save a history event for the sent message
-        const newHistoryConfig = [{
+        const newHistoryConfig: HistoryItem[] = [{
             date: new Date().toISOString(),
             action: `Chat: ${lineMessageText}`
         }, ...(contact.history || [])];
-        
-        const updatedContact = { ...contact, history: newHistoryConfig };
-        
+
+        const updatedContact: Contact = { ...contact, history: newHistoryConfig };
+
         // Save quietly in background
         handleSaveAndSync(updatedContact);
 
@@ -489,7 +532,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
   };
 
   const copyIcon = (text: string, field: string) => (
-      <button 
+      <button
          onClick={() => copyToClipboard(text, field)}
          title="Copy"
          disabled={!text}
@@ -499,29 +542,29 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
       </button>
   );
 
-  const matchedContacts = contactSearchQuery.trim() === "" ? [] : allContacts.filter((c: any) => 
-     c.id !== contact.id && ( 
-     c.name?.toLowerCase().includes(contactSearchQuery.toLowerCase()) || 
+  const matchedContacts = contactSearchQuery.trim() === "" ? [] : allContacts.filter((c: Contact) =>
+     c.id !== contact.id && (
+     c.name?.toLowerCase().includes(contactSearchQuery.toLowerCase()) ||
      c.email?.toLowerCase().includes(contactSearchQuery.toLowerCase()) ||
      c.lineId?.toLowerCase().includes(contactSearchQuery.toLowerCase())
-  )).slice(0, 5); 
+  )).slice(0, 5);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 sm:p-6 lg:p-8 font-sans text-slate-800">
-      
+
       {showConfirmModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-in fade-in zoom-in duration-200">
               <h3 className="text-lg font-bold text-slate-900 mb-2">Unsaved Changes</h3>
-              <p className="text-sm text-slate-500 mb-6">You have modified this contact's details. Are you sure you want to discard your changes and go back?</p>
+              <p className="text-sm text-slate-500 mb-6">You have modified this contact&apos;s details. Are you sure you want to discard your changes and go back?</p>
               <div className="flex space-x-3">
-                 <button 
+                 <button
                   onClick={() => setShowConfirmModal(false)}
                   className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                  >
                    Keep Editing
                  </button>
-                 <button 
+                 <button
                   onClick={() => {
                     setShowConfirmModal(false);
                     onBack();
@@ -539,9 +582,9 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
         <div className="h-2 w-full bg-gradient-to-r from-blue-700 to-blue-500 shrink-0"></div>
 
         <div className="flex-1 overflow-y-auto">
-          
+
           <div className="px-6 sm:px-8 py-4 border-b border-slate-100 bg-white sticky top-0 z-20 flex items-center justify-between">
-            <button 
+            <button
               onClick={attemptBack}
               disabled={isSaving}
               className="flex items-center text-sm font-semibold text-slate-500 hover:text-blue-600 transition-colors group disabled:opacity-50 shrink-0"
@@ -568,8 +611,8 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                   {isSearchOpen && contactSearchQuery && (
                      <div className="absolute top-full mt-2 w-full bg-white border border-slate-100 shadow-xl rounded-xl overflow-hidden">
                         {matchedContacts.length > 0 ? (
-                           matchedContacts.map((mc: any) => (
-                              <button 
+                           matchedContacts.map((mc: Contact) => (
+                              <button
                                 key={mc.id}
                                 onClick={() => {
                                   if (hasUnsavedChanges) {
@@ -612,10 +655,10 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                  {saveSuccess}
               </div>
             )}
-            
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
               <div className="space-y-8">
-                
+
                 <div className="flex items-center space-x-4">
                   <div className="h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold text-2xl shrink-0 shadow-inner">
                     {contact.name ? contact.name.charAt(0).toUpperCase() : <User className="w-6 h-6 text-blue-400" />}
@@ -631,13 +674,13 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
 
                 <div className="space-y-4 bg-slate-50 p-5 rounded-xl border border-slate-100">
                   <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-2">Contact Details</h3>
-                  
+
                   <div className="space-y-3">
                     <div className="relative flex items-center group">
                       <div className="relative flex-1">
                         <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           value={contact.name}
                           onChange={(e) => setContact({...contact, name: e.target.value})}
                           className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300"
@@ -646,12 +689,12 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                       </div>
                       {copyIcon(contact.name, 'name')}
                     </div>
-                    
+
                     <div className="relative flex items-center group">
                       <div className="relative flex-1">
                         <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                        <input 
-                          type="email" 
+                        <input
+                          type="email"
                           value={contact.email}
                           onChange={(e) => setContact({...contact, email: e.target.value})}
                           className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300"
@@ -664,8 +707,8 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                     <div className="relative flex items-center group">
                       <div className="relative flex-1">
                         <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                        <input 
-                          type="tel" 
+                        <input
+                          type="tel"
                           value={contact.phone}
                           onChange={(e) => setContact({...contact, phone: e.target.value})}
                           className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300"
@@ -679,8 +722,8 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                       <div className="relative flex-1">
                          <label className="absolute -top-1 left-3 bg-slate-50 px-1 text-xs font-semibold text-emerald-600 z-10">LINE User ID</label>
                         <MessageCircle className="absolute left-3 top-5 h-5 w-5 text-emerald-500" />
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           value={contact.lineId}
                           onChange={(e) => setContact({...contact, lineId: e.target.value})}
                           className="w-full pl-10 pr-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all hover:border-emerald-300"
@@ -698,12 +741,12 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                       <TagIcon className="w-4 h-4 mr-2 text-slate-500" /> Tags
                     </h3>
                   </div>
-                  
+
                   <div className="flex flex-wrap gap-2">
                     {contact.tags.map((tag: string, idx: number) => (
                       <span key={idx} className="group inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm transition-all hover:bg-emerald-200">
                         {tag}
-                        <button 
+                        <button
                           onClick={() => handleRemoveTag(tag)}
                           className="ml-1.5 p-0.5 rounded-full hover:bg-emerald-300 transition-colors"
                         >
@@ -717,15 +760,15 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                   </div>
 
                   <div className="flex space-x-2 pt-2">
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={newTag}
                       onChange={(e) => setNewTag(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
                       className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                       placeholder="Add New Tag..."
                     />
-                    <button 
+                    <button
                       onClick={handleAddTag}
                       className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
@@ -737,7 +780,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
               </div>
 
               <div className="space-y-6 flex flex-col h-full items-stretch">
-                
+
                 <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
                   <div className="flex items-center space-x-3">
                     <CheckCircle2 className="w-6 h-6 text-emerald-500" />
@@ -747,7 +790,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                     </div>
                   </div>
                   <div className="px-3 py-1 bg-white rounded-full border border-emerald-200 shadow-sm relative group overflow-hidden cursor-pointer">
-                    <select 
+                    <select
                        value={contact.status}
                        onChange={(e) => setContact({...contact, status: e.target.value})}
                        className="absolute inset-0 opacity-0 cursor-pointer w-full"
@@ -764,13 +807,13 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                   <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2 flex justify-between">
                     Webinar Setup
                   </h3>
-                  
+
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                          <label className="text-xs font-medium text-slate-500">Webinar Link</label>
                          {contact.webinar.link && (
-                           <button 
+                           <button
                              onClick={() => copyToClipboard(contact.webinar.link, 'webinarLink')}
                              className="text-xs flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors"
                              title="Copy to clipboard"
@@ -785,8 +828,8 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                       </div>
                       <div className="relative group">
                         <LinkIcon className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                        <input 
-                          type="url" 
+                        <input
+                          type="url"
                           value={contact.webinar.link}
                           onChange={(e) => setContact({...contact, webinar: {...contact.webinar, link: e.target.value}})}
                           className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm text-blue-600 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300 bg-slate-50 focus:bg-white"
@@ -799,8 +842,8 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                       <label className="text-xs font-medium text-slate-500">Scheduled Date</label>
                       <div className="relative group">
                         <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                        <input 
-                          type="date" 
+                        <input
+                          type="date"
                           value={contact.webinar.dateTime}
                           onChange={(e) => setContact({...contact, webinar: {...contact.webinar, dateTime: e.target.value}})}
                           className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300 bg-slate-50 focus:bg-white custom-calendar"
@@ -827,25 +870,25 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                     {/* Chat Messages Area */}
                     <div className="flex-1 p-4 overflow-y-auto space-y-4 flex flex-col pt-4">
                        {contact.history && contact.history.length > 0 ? (
-                          contact.history.slice().reverse().map((histItem: any, i: number) => {
+                          contact.history.slice().reverse().map((histItem: HistoryItem, i: number) => {
                              // Determine if message is outgoing (from CRM to User) or incoming (from User to CRM)
                              // We'll use the action text for now to distinguish logic vs chat.
                              const isChatMessage = histItem.action.startsWith("Chat: ");
                              const isIncomingMessage = histItem.action.startsWith("Received: ");
-                             
+
                              if (!isChatMessage && !isIncomingMessage) {
                                // System Log (Centered)
                                return (
                                  <div key={i} className="flex justify-center w-full my-2">
                                    <div className="bg-black/20 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] text-white/90 font-medium">
-                                     {histItem.action} • {new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                     {histItem.action} • {histItem.date ? new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                                    </div>
                                  </div>
                                );
                              }
 
                              const messageText = histItem.action.replace("Chat: ", "").replace("Received: ", "");
-                             
+
                              if (isChatMessage) {
                                // Outgoing Message (Right Side, Green Bubble)
                                return (
@@ -853,7 +896,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                                     <div className="bg-[#06c755] text-white px-4 py-2 rounded-2xl rounded-tr-sm shadow-sm max-w-[85%] break-words">
                                       <p className="text-sm">{messageText}</p>
                                     </div>
-                                    <span className="text-[10px] text-slate-200 mt-1 drop-shadow-sm">{new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                    <span className="text-[10px] text-slate-200 mt-1 drop-shadow-sm">{histItem.date ? new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
                                  </div>
                                );
                              } else {
@@ -868,7 +911,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
                                         <p className="text-sm">{messageText}</p>
                                       </div>
                                     </div>
-                                    <span className="text-[10px] text-slate-200 mt-1 drop-shadow-sm ml-8">{new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                    <span className="text-[10px] text-slate-200 mt-1 drop-shadow-sm ml-8">{histItem.date ? new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
                                  </div>
                                );
                              }
@@ -917,7 +960,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
         </div>
 
         <div className="p-6 bg-slate-50 border-t border-slate-200 mt-auto shrink-0 flex flex-col sm:flex-row items-center gap-4 justify-end z-20">
-          <button 
+          <button
            onClick={attemptBack}
            disabled={isSaving}
            className="w-full sm:w-auto px-6 py-3 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-200 order-2 sm:order-1 disabled:opacity-50"
@@ -925,12 +968,12 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
              <span>Cancel</span>
           </button>
 
-          <button 
+          <button
             onClick={() => handleSaveAndSync(contact)}
             disabled={!hasUnsavedChanges || isSaving}
-            className={`w-full sm:w-auto px-8 py-3 rounded-xl font-semibold shadow-md flex items-center justify-center space-x-2 transition-all order-1 sm:order-2 
+            className={`w-full sm:w-auto px-8 py-3 rounded-xl font-semibold shadow-md flex items-center justify-center space-x-2 transition-all order-1 sm:order-2
               ${hasUnsavedChanges && !isSaving
-                ? 'bg-blue-600 hover:bg-blue-700 text-white transform hover:-translate-y-0.5 hover:shadow-lg focus:ring-2 focus:ring-offset-2 focus:ring-blue-600' 
+                ? 'bg-blue-600 hover:bg-blue-700 text-white transform hover:-translate-y-0.5 hover:shadow-lg focus:ring-2 focus:ring-offset-2 focus:ring-blue-600'
                 : 'bg-blue-100 text-blue-400 cursor-not-allowed border border-blue-200'
               }`}
           >
@@ -951,14 +994,20 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
 // ----------------------------------------------------------------------------
 // Conversations 3-Pane View Component
 // ----------------------------------------------------------------------------
-function ConversationsView({ contacts, scriptUrl, onUpdateContact }: any) {
-  const [selectedContactId, setSelectedContactId] = useState("");
+interface ConversationsViewProps {
+  contacts: Contact[];
+  scriptUrl: string;
+  onUpdateContact: (updatedContact: Contact) => void;
+}
+
+function ConversationsView({ contacts, scriptUrl, onUpdateContact }: ConversationsViewProps) {
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [lineMessageText, setLineMessageText] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [messageFeedback, setMessageFeedback] = useState({ type: "", text: "" });
+  const [messageFeedback, setMessageFeedback] = useState<{ type: string; text: string }>({ type: "", text: "" });
   const [copiedField, setCopiedField] = useState("");
 
-  const activeContact = contacts.find((c: any) => c.id === selectedContactId) || null;
+  const activeContact: Contact | null = contacts.find((c: Contact) => c.id === selectedContactId) || null;
 
   // Sorting contacts by latest history date (simple approximation)
   const sortedContacts = [...contacts].filter(c => c.lineId).sort((a, b) => {
@@ -984,14 +1033,14 @@ function ConversationsView({ contacts, scriptUrl, onUpdateContact }: any) {
 
       if (response.ok && data.success) {
         setLineMessageText("");
-        
+
         // Optimistic update in UI & trigger background save
-        const newHistoryConfig = [{
+        const newHistoryConfig: HistoryItem[] = [{
             date: new Date().toISOString(),
             action: `Chat: ${lineMessageText}`
         }, ...(activeContact.history || [])];
-        
-        const updatedContact = { ...activeContact, history: newHistoryConfig };
+
+        const updatedContact: Contact = { ...activeContact, history: newHistoryConfig };
         onUpdateContact(updatedContact);
 
         // Quietly background sync
@@ -1032,8 +1081,8 @@ function ConversationsView({ contacts, scriptUrl, onUpdateContact }: any) {
             <p className="text-xs text-slate-500 font-medium">Recent Conversations</p>
          </div>
          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {sortedContacts.map((c: any) => (
-               <button 
+            {sortedContacts.map((c: Contact) => (
+               <button
                  key={c.id}
                  onClick={() => { setSelectedContactId(c.id); setMessageFeedback({type:"", text:""}); }}
                  className={`w-full text-left p-3 rounded-xl transition-all border ${selectedContactId === c.id ? 'bg-white shadow-sm border-blue-200' : 'bg-transparent border-transparent hover:bg-slate-100'}`}
@@ -1092,29 +1141,29 @@ function ConversationsView({ contacts, scriptUrl, onUpdateContact }: any) {
 
                <div className="flex-1 p-6 overflow-y-auto space-y-6 flex flex-col pt-6">
                   {activeContact.history && activeContact.history.length > 0 ? (
-                     activeContact.history.slice().reverse().map((histItem: any, i: number) => {
+                     activeContact.history.slice().reverse().map((histItem: HistoryItem, i: number) => {
                         const isChatMessage = histItem.action.startsWith("Chat: ");
                         const isIncomingMessage = histItem.action.startsWith("Received: ");
-                        
+
                         if (!isChatMessage && !isIncomingMessage) {
                           return (
                             <div key={i} className="flex justify-center w-full my-4 drop-shadow-sm">
                               <div className="bg-black/25 backdrop-blur-md px-4 py-1.5 rounded-full text-[11px] text-white/95 font-medium border border-white/10">
-                                {histItem.action} • {new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                {histItem.action} • {histItem.date ? new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                               </div>
                             </div>
                           );
                         }
 
                         const messageText = histItem.action.replace("Chat: ", "").replace("Received: ", "");
-                        
+
                         if (isChatMessage) {
                           return (
                             <div key={i} className="flex flex-col items-end w-full animate-in slide-in-from-right-2">
                                <div className="bg-[#06c755] text-white px-4 py-2.5 rounded-2xl rounded-tr-sm shadow-md max-w-[80%] break-words border border-[#05b54d]">
                                  <p className="text-[15px] leading-relaxed">{messageText}</p>
                                </div>
-                               <span className="text-[11px] text-slate-100 mt-1.5 drop-shadow-md font-medium">{new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                               <span className="text-[11px] text-slate-100 mt-1.5 drop-shadow-md font-medium">{histItem.date ? new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
                             </div>
                           );
                         } else {
@@ -1128,7 +1177,7 @@ function ConversationsView({ contacts, scriptUrl, onUpdateContact }: any) {
                                    <p className="text-[15px] leading-relaxed">{messageText}</p>
                                  </div>
                                </div>
-                               <span className="text-[11px] text-slate-100 mt-1.5 drop-shadow-md font-medium ml-9">{new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                               <span className="text-[11px] text-slate-100 mt-1.5 drop-shadow-md font-medium ml-9">{histItem.date ? new Date(histItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
                             </div>
                           );
                         }
@@ -1190,7 +1239,7 @@ function ConversationsView({ contacts, scriptUrl, onUpdateContact }: any) {
                   </div>
                   <h2 className="text-lg font-bold text-slate-900">{activeContact.name || "Unnamed"}</h2>
                   <p className="text-sm text-slate-500 font-medium mb-3">{activeContact.email || "No email provided"}</p>
-                  
+
                   <div className="flex items-center space-x-2">
                      <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${
                         activeContact.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
@@ -1206,7 +1255,7 @@ function ConversationsView({ contacts, scriptUrl, onUpdateContact }: any) {
                   {/* Contact Info Block */}
                   <div className="space-y-4">
                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Contact Info</h3>
-                     
+
                      <div className="flex items-center space-x-3 text-sm">
                         <Phone className="w-4 h-4 text-slate-400 shrink-0" />
                         <span className="text-slate-700 font-medium flex-1">{activeContact.phone || "N/A"}</span>
@@ -1216,7 +1265,7 @@ function ConversationsView({ contacts, scriptUrl, onUpdateContact }: any) {
                            </button>
                         )}
                      </div>
-                     
+
                      <div className="flex items-center space-x-3 text-sm">
                         <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                         <span className="text-emerald-700 font-medium flex-1 truncate">{activeContact.lineId}</span>

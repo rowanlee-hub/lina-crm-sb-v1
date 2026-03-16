@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       if (!userId) continue;
 
       // Ensure user exists in Supabase
-      const { data: contact, error: fetchError } = await supabase
+      const { data: contact } = await supabase
         .from('contacts')
         .select('*')
         .eq('line_id', userId)

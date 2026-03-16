@@ -91,8 +91,9 @@ export async function POST(req: Request) {
          id: dbResult.id
       });
       
-   } catch (error: any) {
+   } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error saving contact';
       console.error("API POST Contacts Error:", error);
-      return NextResponse.json({ success: false, error: error.message || 'Error saving contact' }, { status: 500 });
+      return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
    }
 }

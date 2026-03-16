@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 
 // This route should be triggered by Vercel Cron or GitHub Actions.
 // e.g. every 15 minutes.
-export async function GET(req: Request) {
+export async function GET() {
   try {
     // 1. Authenticate the Cron request (optional but recommended for production)
     // const authHeader = req.headers.get('authorization');
@@ -83,8 +83,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ success: true, dispatched: dispatchedCount });
 
-  } catch (err: any) {
-    console.error("Cron Error:", err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error("Cron Job Error:", error);
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
