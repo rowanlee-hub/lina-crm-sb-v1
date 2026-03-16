@@ -12,7 +12,6 @@ import {
 // ============================================================================
 // BACKEND URLS
 // ============================================================================
-const SCRIPT_URL = process.env.NEXT_PUBLIC_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbyI7QLJ8E39oZJ8DuCxoCU1qf8HNxs5_tdYA5RbH8SHTNl9tk-CPxnjnWL0XdeUt9IaLw/exec";
 const INTERNAL_API_URL = "/api/line/send";
 const CONTACTS_API = "/api/contacts"; // New Supabase API
 
@@ -306,7 +305,6 @@ export default function CRMDashboard() {
                   contactData={activeContact}
                   onBack={handleBackToList}
                   isNew={isNew}
-                  scriptUrl={SCRIPT_URL}
                   allContacts={contacts}
                   onSwitchContact={handleContactClick}
                   onSaveSuccess={(updatedContact: Contact) => {
@@ -327,7 +325,6 @@ export default function CRMDashboard() {
         ) : (
           <ConversationsView
             contacts={contacts}
-            scriptUrl={SCRIPT_URL}
             onUpdateContact={(updatedContact: Contact) => {
               const existsIndex = contacts.findIndex(c => c.id === updatedContact.id);
               if (existsIndex > -1) {
@@ -351,12 +348,11 @@ interface ContactDetailViewProps {
   onBack: () => void;
   onSaveSuccess: (updatedContact: Contact) => void;
   isNew: boolean;
-  scriptUrl: string;
   allContacts: Contact[];
   onSwitchContact: (id: string) => void;
 }
 
-function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUrl, allContacts, onSwitchContact }: ContactDetailViewProps) {
+function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allContacts, onSwitchContact }: ContactDetailViewProps) {
   const safeContactData: Contact = {
       ...contactData,
       tags: contactData.tags || [],
@@ -428,11 +424,6 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
   };
 
   const handleSaveAndSync = async (contactPayload: Contact = contact) => {
-    if (scriptUrl.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
-        setSaveError("Please set your SCRIPT_URL to save data.");
-        return;
-    }
-
     setIsSaving(true);
     setSaveError("");
     setSaveSuccess("");
@@ -996,11 +987,10 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, scriptUr
 // ----------------------------------------------------------------------------
 interface ConversationsViewProps {
   contacts: Contact[];
-  scriptUrl: string;
   onUpdateContact: (updatedContact: Contact) => void;
 }
 
-function ConversationsView({ contacts, scriptUrl, onUpdateContact }: ConversationsViewProps) {
+function ConversationsView({ contacts, onUpdateContact }: ConversationsViewProps) {
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [lineMessageText, setLineMessageText] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -1043,14 +1033,12 @@ function ConversationsView({ contacts, scriptUrl, onUpdateContact }: Conversatio
         const updatedContact: Contact = { ...activeContact, history: newHistoryConfig };
         onUpdateContact(updatedContact);
 
-        // Quietly background sync
-        if (scriptUrl && !scriptUrl.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
-            fetch(scriptUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: JSON.stringify(updatedContact)
-            }).catch(e => console.error("Background sync failed:", e));
-        }
+        // Quietly background sync to Supabase
+        fetch(CONTACTS_API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedContact)
+        }).catch(e => console.error("Background sync failed:", e));
 
       } else {
         setMessageFeedback({ type: "error", text: data.error || "Failed to push message." });
