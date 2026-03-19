@@ -2789,7 +2789,14 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                     <textarea rows={5} value={wbMessage} onChange={e => setWbMessage(e.target.value)}
                       placeholder={"Hi {{name}}! 👋 Just a reminder — our webinar is on {{webinar_date}}.\n\nJoin here: {{webinar_link}}"}
                       className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none font-mono" />
-                    <p className="text-xs text-slate-400 mt-1">Variables: {'{{name}}'} {'{{webinar_date}}'} {'{{webinar_link}}'}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {['{{name}}','{{webinar_link}}','{{webinar_date}}','{{email}}','{{phone}}','{{status}}','{{tags}}','{{notes}}','{{uid}}','{{follow_up_note}}'].map(v => (
+                        <button key={v} onClick={async () => { await navigator.clipboard.writeText(v); setCopiedVar(v); setTimeout(() => setCopiedVar(null), 1200); }}
+                          className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-mono border transition-all ${copiedVar === v ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100'}`}>
+                          {copiedVar === v ? <><Check className="w-2.5 h-2.5" />copied</> : v}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex items-center space-x-2 flex-wrap gap-y-2">
                     {/* Test before saving */}
