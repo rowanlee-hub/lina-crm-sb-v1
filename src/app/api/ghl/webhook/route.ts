@@ -28,15 +28,6 @@ export async function POST(req: Request) {
     const uid = body.uid || body['UID (If applicable)'] || body.uid_if_applicable || '';
     const webinar_link = body['Webinar link'] || body['Webinar replay link'] || body.webinar_link || '';
 
-    // Always use active_webinar_date from Lina settings — Lina controls the schedule.
-    // Cron rotates this every Wednesday at 9pm Malaysia time.
-    const { data: dateSetting } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'active_webinar_date')
-      .single();
-    const webinar_date = dateSetting?.value || null;
-
     // Normalise tags — GHL may send a string, array, or comma-separated string
     const rawTags = body.tags;
     let tags: string[] = [];
@@ -44,6 +35,27 @@ export async function POST(req: Request) {
       tags = rawTags.flatMap((t: string) => t.split(',').map((s: string) => s.trim())).filter(Boolean);
     } else if (typeof rawTags === 'string' && rawTags.trim()) {
       tags = rawTags.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+
+    // Determine webinar date:
+    // If contact has a webinar-MMDD tag (e.g. webinar-0318), derive the date from that tag.
+    // This prevents late-syncing past registrants from getting the upcoming webinar date.
+    // Otherwise fall back to active_webinar_date from settings.
+    let webinar_date: string | null = null;
+    const webinarTagMatch = tags.find(t => /^webinar-\d{4}$/.test(t));
+    if (webinarTagMatch) {
+      const mmdd = webinarTagMatch.replace('webinar-', '');
+      const mm = mmdd.substring(0, 2);
+      const dd = mmdd.substring(2, 4);
+      const year = new Date().getFullYear();
+      webinar_date = `${year}-${mm}-${dd}`;
+    } else {
+      const { data: dateSetting } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'active_webinar_date')
+        .single();
+      webinar_date = dateSetting?.value || null;
     }
 
     if (!ghlId && !email) {
