@@ -94,7 +94,6 @@ export async function POST(req: Request) {
       uid: contact.uid || '',
       attended: contact.attended,
       purchased: contact.purchased,
-      follow_up_at: contact.follow_up_at || null,
       follow_up_note: contact.follow_up_note || '',
       updated_at: new Date().toISOString(),
     };
