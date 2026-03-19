@@ -1045,7 +1045,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                         <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
                         <input
                           type="date"
-                          value={contact.webinar.dateTime}
+                          value={contact.webinar.dateTime ? contact.webinar.dateTime.substring(0, 10) : ''}
                           onChange={(e) => setContact({...contact, webinar: {...contact.webinar, dateTime: e.target.value}})}
                           className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300 bg-slate-50 focus:bg-white custom-calendar"
                         />
