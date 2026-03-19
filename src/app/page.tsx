@@ -525,12 +525,32 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
   const [messageFeedback, setMessageFeedback] = useState<{ type: string; text: string }>({ type: "", text: "" });
   const [wbEnrollment, setWbEnrollment] = useState<any>(null);
   const [wbMessages, setWbMessages] = useState<any[]>([]);
+  const [webinarDateOptions, setWebinarDateOptions] = useState<{ label: string; value: string }[]>([]);
 
   // Load tag definitions for autocomplete
   useEffect(() => {
     fetch('/api/tags').then(r => r.json()).then(data => {
       if (Array.isArray(data)) setTagSuggestions(data);
     }).catch(() => {});
+  }, []);
+
+  // Load webinar date options (upcoming + previous Wednesday)
+  useEffect(() => {
+    fetch('/api/settings?key=active_webinar_date')
+      .then(r => r.json())
+      .then(data => {
+        if (data.value) {
+          const upcoming = new Date(data.value);
+          const prev = new Date(data.value);
+          prev.setDate(prev.getDate() - 7);
+          const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          const fmtLabel = (d: Date) => d.toLocaleDateString('en-MY', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+          setWebinarDateOptions([
+            { label: `Upcoming — ${fmtLabel(upcoming)}`, value: fmt(upcoming) },
+            { label: `Previous — ${fmtLabel(prev)}`, value: fmt(prev) },
+          ]);
+        }
+      }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1040,24 +1060,17 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500">Scheduled Date <span className="text-slate-400 font-normal">(Wednesdays only)</span></label>
-                      <div className="relative group">
-                        <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                        <input
-                          type="date"
-                          value={contact.webinar.dateTime ? contact.webinar.dateTime.substring(0, 10) : ''}
-                          onChange={(e) => {
-                            if (!e.target.value) { setContact({...contact, webinar: {...contact.webinar, dateTime: ''}}); return; }
-                            const [y, m, d] = e.target.value.split('-').map(Number);
-                            const date = new Date(y, m - 1, d);
-                            const day = date.getDay();
-                            if (day !== 3) { const diff = (3 - day + 7) % 7 || 7; date.setDate(date.getDate() + diff); }
-                            const snapped = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-                            setContact({...contact, webinar: {...contact.webinar, dateTime: snapped}});
-                          }}
-                          className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300 bg-slate-50 focus:bg-white custom-calendar"
-                        />
-                      </div>
+                      <label className="text-xs font-medium text-slate-500">Webinar Date</label>
+                      <select
+                        value={contact.webinar.dateTime ? contact.webinar.dateTime.substring(0, 10) : ''}
+                        onChange={(e) => setContact({...contact, webinar: {...contact.webinar, dateTime: e.target.value}})}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-slate-50"
+                      >
+                        <option value="">— Not assigned —</option>
+                        {webinarDateOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
