@@ -5,19 +5,29 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // GET — list enrollments with scheduled message counts
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const { data } = await supabase
+    const { searchParams } = new URL(req.url);
+    const contactId = searchParams.get('contact_id');
+
+    let query = supabase
       .from('webinar_enrollments')
       .select(`
-        id, status, webinar_date, enrolled_at,
+        id, status, webinar_date, enrolled_at, contact_id,
         contacts(id, name, email, line_id),
         webinar_scheduled_messages(id, status, scheduled_at, sent_at,
           webinar_sequence_steps(days_before, message)
         )
       `)
-      .order('enrolled_at', { ascending: false })
-      .limit(100);
+      .order('enrolled_at', { ascending: false });
+
+    if (contactId) {
+      query = query.eq('contact_id', contactId);
+    } else {
+      query = query.limit(100);
+    }
+
+    const { data } = await query;
 
     return NextResponse.json(data || []);
   } catch {

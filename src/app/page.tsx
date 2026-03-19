@@ -415,12 +415,6 @@ function CRMDashboard() {
                             ? (contact.history?.[0]?.action?.replace("Chat: ", "You: ").replace("Received: ", "") || "No messages")
                             : (contact.email || contact.lineId || "No info")}
                         </p>
-                        {contact.follow_up_at && (
-                          <div className={`flex items-center space-x-1 px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ml-2 ${new Date(contact.follow_up_at) < new Date() ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-600'}`}>
-                            <Clock className="w-2.5 h-2.5" />
-                            <span>{new Date(contact.follow_up_at).toLocaleDateString([], {day:'numeric', month:'short'})}</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -529,6 +523,8 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
   const [lineMessageText, setLineMessageText] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [messageFeedback, setMessageFeedback] = useState<{ type: string; text: string }>({ type: "", text: "" });
+  const [wbEnrollment, setWbEnrollment] = useState<any>(null);
+  const [wbMessages, setWbMessages] = useState<any[]>([]);
 
   // Load tag definitions for autocomplete
   useEffect(() => {
@@ -548,6 +544,19 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
     });
     setLineMessageText("");
     setMessageFeedback({ type: "", text: "" });
+    // Fetch webinar enrollment for this contact
+    if (contactData.id && !isNew) {
+      fetch(`/api/webinar-sequence/enrollments?contact_id=${contactData.id}`)
+        .then(r => r.json())
+        .then(data => {
+          const enrollment = Array.isArray(data) ? data.find((e: any) => e.contact_id === contactData.id) : null;
+          setWbEnrollment(enrollment ?? null);
+        }).catch(() => {});
+      fetch(`/api/webinar-sequence/messages?contact_id=${contactData.id}`)
+        .then(r => r.json())
+        .then(data => setWbMessages(Array.isArray(data) ? data : []))
+        .catch(() => {});
+    }
   }, [contactData]);
 
   useEffect(() => {
@@ -1045,35 +1054,57 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                   </div>
                 </div>
 
-                {/* --- Follow-Up Section --- */}
+                {/* --- Notes Section --- */}
                 {!isNew && (
-                  <div className="p-5 border border-slate-200 rounded-xl bg-white shadow-sm ring-1 ring-orange-100">
-                    <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2 flex items-center justify-between">
-                      <span className="flex items-center"><Calendar className="w-4 h-4 mr-2 text-orange-500" />Follow-Up</span>
-                      {contact.follow_up_at && new Date(contact.follow_up_at) < new Date() && (
-                        <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200 animate-pulse">⚠ Overdue</span>
-                      )}
+                  <div className="p-5 border border-slate-200 rounded-xl bg-white shadow-sm">
+                    <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2 flex items-center">
+                      <Bell className="w-4 h-4 mr-2 text-slate-400" />Notes
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-500">Scheduled Date</label>
-                        <input
-                          type="datetime-local"
-                          value={contact.follow_up_at ? contact.follow_up_at.slice(0, 16) : ''}
-                          onChange={(e) => setContact({...contact, follow_up_at: e.target.value ? new Date(e.target.value).toISOString() : null})}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none bg-slate-50 focus:bg-white transition-all hover:border-orange-300"
-                        />
+                    <textarea
+                      rows={3}
+                      value={contact.follow_up_note || ''}
+                      onChange={(e) => setContact({...contact, follow_up_note: e.target.value})}
+                      placeholder="Add internal notes about this contact..."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all resize-none"
+                    />
+                  </div>
+                )}
+
+                {/* --- Webinar Sequence Status --- */}
+                {!isNew && (wbEnrollment || wbMessages.length > 0) && (
+                  <div className="border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-blue-500" />
+                        <h3 className="text-sm font-semibold text-slate-700 tracking-wide">Webinar Sequence</h3>
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-500">Follow-Up Note</label>
-                        <input
-                          type="text"
-                          value={contact.follow_up_note || ''}
-                          onChange={(e) => setContact({...contact, follow_up_note: e.target.value})}
-                          placeholder="e.g. Call to discuss pricing..."
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none transition-all hover:border-orange-300"
-                        />
-                      </div>
+                      {wbEnrollment && (() => {
+                        const wDate = new Date(wbEnrollment.webinar_date);
+                        const isPast = wDate < new Date();
+                        return (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isPast ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                            {isPast ? 'Past webinar' : 'Upcoming webinar'} · {wDate.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                      {wbMessages.length === 0 ? (
+                        <p className="px-4 py-3 text-xs text-slate-400">No sequence messages scheduled.</p>
+                      ) : (
+                        wbMessages.map((msg: any) => {
+                          const statusColor = msg.status === 'sent' ? 'text-emerald-600 bg-emerald-50' : msg.status === 'failed' ? 'text-red-500 bg-red-50' : msg.status === 'skipped' ? 'text-slate-400 bg-slate-100' : 'text-blue-600 bg-blue-50';
+                          return (
+                            <div key={msg.id} className="px-4 py-2.5 flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-600 line-clamp-2">{msg.message_preview || msg.step_message || '—'}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{new Date(msg.scheduled_at).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                              </div>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${statusColor}`}>{msg.status}</span>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 )}
