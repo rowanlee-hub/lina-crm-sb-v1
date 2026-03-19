@@ -28,14 +28,18 @@ export async function POST(req: Request) {
     const uid = body.uid || body['UID (If applicable)'] || body.uid_if_applicable || '';
     const webinar_link = body['Webinar link'] || body['Webinar replay link'] || body.webinar_link || '';
 
-    // Always use the active webinar date from settings (rotates every Wednesday 9pm).
-    // Ignore whatever date GHL sends — Lina controls the schedule.
-    const { data: dateSetting } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'active_webinar_date')
-      .single();
-    const webinar_date = dateSetting?.value || null;
+    // Use the webinar date sent by Make.com (pre-calculated to next Wednesday).
+    // Falls back to active_webinar_date from settings if Make.com doesn't send one.
+    const bodyDate = body['Webinar date timestamp'] || body['Webinar date & time'] || body.webinar_date || null;
+    let webinar_date = bodyDate;
+    if (!webinar_date) {
+      const { data: dateSetting } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'active_webinar_date')
+        .single();
+      webinar_date = dateSetting?.value || null;
+    }
 
     // Normalise tags — GHL may send a string, array, or comma-separated string
     const rawTags = body.tags;
