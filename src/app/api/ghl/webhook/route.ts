@@ -38,17 +38,20 @@ export async function POST(req: Request) {
     }
 
     // Determine webinar date:
-    // If contact has a webinar-MMDD tag (e.g. webinar-0318), derive the date from that tag.
-    // This prevents late-syncing past registrants from getting the upcoming webinar date.
-    // Otherwise fall back to active_webinar_date from settings.
+    // If contact has webinar-MMDD tag(s), pick the LATEST one to handle returning leads
+    // who have tags from multiple webinars (e.g. webinar-0318 + webinar-0325).
+    // Falls back to active_webinar_date from settings if no tag found.
     let webinar_date: string | null = null;
-    const webinarTagMatch = tags.find(t => /^webinar-\d{4}$/.test(t));
-    if (webinarTagMatch) {
-      const mmdd = webinarTagMatch.replace('webinar-', '');
-      const mm = mmdd.substring(0, 2);
-      const dd = mmdd.substring(2, 4);
-      const year = new Date().getFullYear();
-      webinar_date = `${year}-${mm}-${dd}`;
+    const year = new Date().getFullYear();
+    const webinarDateTags = tags
+      .filter(t => /^webinar-\d{4}$/.test(t))
+      .map(t => {
+        const mmdd = t.replace('webinar-', '');
+        return `${year}-${mmdd.substring(0, 2)}-${mmdd.substring(2, 4)}`;
+      })
+      .sort();
+    if (webinarDateTags.length > 0) {
+      webinar_date = webinarDateTags[webinarDateTags.length - 1]; // latest date
     } else {
       const { data: dateSetting } = await supabase
         .from('settings')
