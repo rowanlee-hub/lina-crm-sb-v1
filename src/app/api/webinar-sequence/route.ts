@@ -74,12 +74,14 @@ export async function PATCH(req: Request) {
   }
 }
 
-// DELETE — remove a step
+// DELETE — remove a step (and its scheduled messages to avoid FK constraint)
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 });
+    // Delete related scheduled messages first
+    await supabase.from('webinar_scheduled_messages').delete().eq('step_id', id);
     const { error } = await supabase.from('webinar_sequence_steps').delete().eq('id', id);
     if (error) throw error;
     return NextResponse.json({ success: true });
