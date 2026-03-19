@@ -653,7 +653,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
       }
     } catch (error) {
       console.error("Save Error:", error);
-      setSaveError("Failed to save. Please make sure your Supabase project is configured properly.");
+      setSaveError(`Failed to save: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsSaving(false);
     }
