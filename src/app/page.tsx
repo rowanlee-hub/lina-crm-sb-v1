@@ -68,6 +68,7 @@ function CRMDashboard() {
   const [view, setView] = useState<"list" | "detail" | "add">("list");
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [activeWebinarDate, setActiveWebinarDate] = useState<string>('');
   const [isImporting, setIsImporting] = useState(false);
   const [isDeduping, setIsDeduping] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -83,6 +84,7 @@ function CRMDashboard() {
   // Fetch contacts on mount + real-time subscriptions
   useEffect(() => {
     fetchContacts();
+    fetch('/api/settings?key=active_webinar_date').then(r => r.json()).then(d => { if (d.value) setActiveWebinarDate(d.value); }).catch(() => {});
 
     // Real-time: watch contacts table for any changes
     const contactChannel = supabase
@@ -409,12 +411,17 @@ function CRMDashboard() {
                           </span>
                         )}
                       </div>
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center gap-2">
                         <p className="text-xs text-slate-500 truncate font-medium flex-1">
-                          {activeTab === 'inbox' 
+                          {activeTab === 'inbox'
                             ? (contact.history?.[0]?.action?.replace("Chat: ", "You: ").replace("Received: ", "") || "No messages")
                             : (contact.email || contact.lineId || "No info")}
                         </p>
+                        {contact.webinar?.dateTime && activeWebinarDate && (
+                          contact.webinar.dateTime.substring(0, 10) === activeWebinarDate.substring(0, 10)
+                            ? <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">UPCOMING</span>
+                            : <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500">PAST</span>
+                        )}
                       </div>
                     </div>
                   </div>
