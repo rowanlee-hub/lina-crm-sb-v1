@@ -33,6 +33,8 @@ export async function processAutomations(
           await executeAddTag(contactId, auto.action_value, lineId);
         } else if (auto.action_type === 'REMOVE_TAG') {
           await executeRemoveTag(contactId, auto.action_value);
+        } else if (auto.action_type === 'ENROLL_WEBINAR') {
+          await executeEnrollWebinar(contactId);
         }
       } catch (err) {
         console.error(`[AutomationEngine] Failed to execute action ${auto.action_type}:`, err);
@@ -108,6 +110,18 @@ async function executeAddTag(contactId: string, tag: string, lineId: string) {
   // Recursively trigger nested automations!
   // We use a small delay or setImmediate to avoid deep recursion issues if any
   processAutomations('TAG_ADDED', tag, contactId, lineId);
+}
+
+async function executeEnrollWebinar(contactId: string) {
+  const { data: contact } = await supabase.from('contacts').select('webinar_date, name').eq('id', contactId).single();
+  if (!contact?.webinar_date) {
+    console.log(`[AutomationEngine] No webinar_date set for contact ${contactId}, skipping enroll`);
+    return;
+  }
+
+  const { enrollInWebinarSequence } = await import('./webinar-sequence');
+  await enrollInWebinarSequence(contactId, contact.webinar_date, contact.name || '');
+  console.log(`[AutomationEngine] Enrolled contact ${contactId} in webinar sequence`);
 }
 
 async function executeRemoveTag(contactId: string, tag: string) {

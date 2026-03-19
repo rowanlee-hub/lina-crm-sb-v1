@@ -2547,13 +2547,19 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                       <option value="SEND_MESSAGE">Send Message</option>
                       <option value="ADD_TAG">Add Tag</option>
                       <option value="REMOVE_TAG">Remove Tag</option>
+                      <option value="ENROLL_WEBINAR">Enroll in Webinar Sequence</option>
                     </select>
-                    <textarea value={ruleActionVal} onChange={e => setRuleActionVal(e.target.value)} placeholder="Message or tag name" rows={2} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                    {ruleActionType !== 'ENROLL_WEBINAR' && (
+                      <textarea value={ruleActionVal} onChange={e => setRuleActionVal(e.target.value)} placeholder="Message or tag name" rows={2} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                    )}
+                    {ruleActionType === 'ENROLL_WEBINAR' && (
+                      <p className="text-xs text-slate-400 px-1">Will enroll the contact in the webinar sequence based on their <strong>webinar_date</strong>.</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex justify-end space-x-3">
                   <button onClick={() => setShowRuleForm(false)} className="px-5 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-xl">Cancel</button>
-                  <button onClick={createRule} disabled={!ruleName || !ruleTriggerVal || !ruleActionVal} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50">Save Rule</button>
+                  <button onClick={createRule} disabled={!ruleName || !ruleTriggerVal || (ruleActionType !== 'ENROLL_WEBINAR' && !ruleActionVal)} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50">Save Rule</button>
                 </div>
               </div>
             )}
@@ -2569,7 +2575,8 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                       <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 font-bold text-[10px] uppercase">{auto.trigger_type?.replace('_',' ')}</span>
                       <span className="font-extrabold text-slate-800">{auto.trigger_value}</span>
                       <span className="text-slate-400">→</span>
-                      <span className="px-1.5 py-0.5 bg-blue-100 rounded text-blue-600 font-bold text-[10px] uppercase">{auto.action_type?.replace('_',' ')}</span>
+                      <span className="px-1.5 py-0.5 bg-blue-100 rounded text-blue-600 font-bold text-[10px] uppercase">{auto.action_type === 'ENROLL_WEBINAR' ? 'Enroll Webinar Seq' : auto.action_type?.replace('_',' ')}</span>
+                      {auto.action_value && <span className="text-slate-500 truncate max-w-[120px]">{auto.action_value}</span>}
                     </div>
                   </div>
                 </div>
