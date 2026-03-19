@@ -53,10 +53,15 @@ async function executeSendMessage(contactId: string, lineId: string, message: st
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!token || !lineId) return;
 
+  // Render {{variables}} before sending
+  const { data: contact } = await supabase.from('contacts').select('*').eq('id', contactId).single();
+  const { renderMessageSync } = await import('./render-message');
+  const rendered = renderMessageSync(message, contact ?? {});
+
   const url = 'https://api.line.me/v2/bot/message/push';
   const payload = {
     to: lineId,
-    messages: [{ type: 'text', text: message }]
+    messages: [{ type: 'text', text: rendered }]
   };
 
   const response = await fetch(url, {
@@ -72,7 +77,7 @@ async function executeSendMessage(contactId: string, lineId: string, message: st
     // Log history with [Auto] prefix
     await supabase.from('contact_history').insert({
       contact_id: contactId,
-      action: `Chat: [Auto] ${message}`
+      action: `Chat: [Auto] ${rendered}`
     });
     console.log(`[AutomationEngine] Auto-message sent to ${lineId}`);
   } else {

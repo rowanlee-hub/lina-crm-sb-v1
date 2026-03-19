@@ -54,7 +54,7 @@ export async function GET() {
     // ─── PART 3: Workflow Message Queue (Action processing) ────
     const { data: queuedMessages } = await supabase
       .from('message_queue')
-      .select('*, contacts(line_id, name, tags)')
+      .select('*, contacts(line_id, name, email, phone, tags, webinar_link, webinar_date, status, notes, uid, follow_up_note)')
       .eq('status', 'queued')
       .lte('scheduled_at', now)
       .order('scheduled_at', { ascending: true })
@@ -88,10 +88,13 @@ export async function GET() {
           }
           actionSuccess = true;
         } else {
-          // Send LINE Message
-          actionSuccess = await sendLineMessage(lineToken, lineId, msg.message);
+          // Render {{variables}} then send
+          const { renderMessageSync } = await import('@/lib/render-message');
+          const contact = (msg as any).contacts ?? {};
+          const rendered = renderMessageSync(msg.message, contact);
+          actionSuccess = await sendLineMessage(lineToken, lineId, rendered);
           if (actionSuccess) {
-            await supabase.from('contact_history').insert({ contact_id: msg.contact_id, action: `Chat: [Auto] ${msg.message}` });
+            await supabase.from('contact_history').insert({ contact_id: msg.contact_id, action: `Chat: [Auto] ${rendered}` });
           }
         }
 
