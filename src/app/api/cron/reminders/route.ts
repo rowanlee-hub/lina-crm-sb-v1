@@ -24,24 +24,27 @@ export async function GET() {
     // ─── PART 2: Legacy Reminders ──────────────────────────────
     const { data: dueReminders } = await supabase
       .from('reminders')
-      .select('*, contacts(line_id, name)')
+      .select('*, contacts(line_id, name, email, phone, tags, status, notes, uid, webinar_link, webinar_date, follow_up_note)')
       .eq('status', 'pending')
       .lte('scheduled_time', now);
 
     if (dueReminders && dueReminders.length > 0) {
+      const { renderMessageSync } = await import('@/lib/render-message');
       for (const reminder of dueReminders) {
-        const lineId = (reminder as any).contacts?.line_id;
+        const contact = (reminder as any).contacts ?? {};
+        const lineId = contact?.line_id;
         if (!lineId) {
           await supabase.from('reminders').update({ status: 'failed', sent_at: now }).eq('id', reminder.id);
           totalFailed++;
           continue;
         }
-        const ok = await sendLineMessage(lineToken, lineId, reminder.message);
+        const rendered = renderMessageSync(reminder.message, contact);
+        const ok = await sendLineMessage(lineToken, lineId, rendered);
         if (ok) {
           await supabase.from('reminders').update({ status: 'sent', sent_at: now }).eq('id', reminder.id);
           await supabase.from('contact_history').insert({
             contact_id: reminder.contact_id,
-            action: `Chat: [Scheduled] ${reminder.message}`,
+            action: `Chat: [Scheduled] ${rendered}`,
           });
           totalSent++;
         } else {
