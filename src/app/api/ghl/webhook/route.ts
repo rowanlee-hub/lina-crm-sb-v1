@@ -27,7 +27,15 @@ export async function POST(req: Request) {
     const phone = body.phone || '';
     const uid = body.uid || body['UID (If applicable)'] || body.uid_if_applicable || '';
     const webinar_link = body['Webinar link'] || body['Webinar replay link'] || body.webinar_link || '';
-    const webinar_date = body['Webinar date timestamp'] || body['Webinar date & time'] || body.webinar_date || null;
+
+    // Always use the active webinar date from settings (rotates every Wednesday 9pm).
+    // Ignore whatever date GHL sends — Lina controls the schedule.
+    const { data: dateSetting } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'active_webinar_date')
+      .single();
+    const webinar_date = dateSetting?.value || null;
 
     // Normalise tags — GHL may send a string, array, or comma-separated string
     const rawTags = body.tags;
