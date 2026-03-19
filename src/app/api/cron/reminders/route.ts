@@ -1,90 +1,224 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { executeWorkflowNode, processWaitQueues } from '@/lib/workflow-engine';
 
-// This route should be triggered by Vercel Cron or GitHub Actions.
-// e.g. every 15 minutes.
+/**
+ * Cron Dispatch Handler — Called every 15 minutes by cron-job.org
+ * Processes legacy reminders, new node transitions, and wait queues.
+ */
 export async function GET() {
   try {
-    // 1. Authenticate the Cron request (optional but recommended for production)
-    // const authHeader = req.headers.get('authorization');
-    // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    //   return new Response('Unauthorized', { status: 401 });
-    // }
-
-    console.log("Running Scheduled Reminder Cron Job...");
-
-    // 2. Fetch all contacts that have the 'Webinar-Reminder-Sequence' tag
-    // Supabase array filtering: contains
-    const { data: contacts, error } = await supabase
-      .from('contacts')
-      .select('*')
-      .contains('tags', ['Webinar-Reminder-Sequence']);
-
-    if (error) {
-       console.error("Error fetching contacts for cron:", error);
-       throw error;
-    }
-
-    if (!contacts || contacts.length === 0) {
-      console.log("No contacts found with the target sequence tag.");
-      return NextResponse.json({ success: true, dispatched: 0 });
-    }
-
-    let dispatchedCount = 0;
+    const now = new Date().toISOString();
     const lineToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
     if (!lineToken) {
-       return NextResponse.json({ success: false, error: 'Missing LINE token' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Missing LINE_CHANNEL_ACCESS_TOKEN' }, { status: 500 });
     }
 
-    // 3. Loop through users and send the reminder
-    // In a real scenario, you'd check `webinar_date` against the current time.
-    // For this example, we simply send a broadcast to all tagged users.
-    for (const user of contacts) {
-       if (!user.line_id) continue;
+    let totalSent = 0;
+    let totalFailed = 0;
 
-       // Construct your reminder message
-       const reminderMessage = `Hi ${user.name || 'there'}! This is an automated reminder that your webinar is starting soon. \nLink: ${user.webinar_link || 'TBD'}`;
+    // ─── PART 1: Process Phase 8 Wait Queues ──────────────────
+    await processWaitQueues();
 
-       try {
-          const response = await fetch('https://api.line.me/v2/bot/message/push', {
-             method: 'POST',
-             headers: {
-               'Content-Type': 'application/json',
-               'Authorization': `Bearer ${lineToken}`
-             },
-             body: JSON.stringify({
-               to: user.line_id,
-               messages: [ { type: 'text', text: reminderMessage } ]
-             })
+    // ─── PART 2: Legacy Reminders ──────────────────────────────
+    const { data: dueReminders } = await supabase
+      .from('reminders')
+      .select('*, contacts(line_id, name)')
+      .eq('status', 'pending')
+      .lte('scheduled_time', now);
+
+    if (dueReminders && dueReminders.length > 0) {
+      for (const reminder of dueReminders) {
+        const lineId = (reminder as any).contacts?.line_id;
+        if (!lineId) {
+          await supabase.from('reminders').update({ status: 'failed', sent_at: now }).eq('id', reminder.id);
+          totalFailed++;
+          continue;
+        }
+        const ok = await sendLineMessage(lineToken, lineId, reminder.message);
+        if (ok) {
+          await supabase.from('reminders').update({ status: 'sent', sent_at: now }).eq('id', reminder.id);
+          await supabase.from('contact_history').insert({
+            contact_id: reminder.contact_id,
+            action: `Chat: [Scheduled] ${reminder.message}`,
           });
-
-          if (response.ok) {
-            console.log(`Successfully sent reminder to ${user.line_id}`);
-            dispatchedCount++;
-
-            // Log history
-            await supabase.from('contact_history').insert({
-               contact_id: user.id,
-               action: `Cron Reminder Sent: ${reminderMessage}`
-            });
-
-            // If it's a one-time reminder, you might want to REMOVE the tag here
-             const newTags = user.tags.filter((t: string) => t !== 'Webinar-Reminder-Sequence');
-             await supabase.from('contacts').update({ tags: newTags }).eq('id', user.id);
-
-          } else {
-             console.error(`Failed to send to lineId ${user.line_id}:`, await response.text());
-          }
-       } catch (err) {
-         console.error(`Error sending message to ${user.line_id}`, err);
-       }
+          totalSent++;
+        } else {
+          await supabase.from('reminders').update({ status: 'failed', sent_at: now }).eq('id', reminder.id);
+          totalFailed++;
+        }
+      }
     }
 
-    return NextResponse.json({ success: true, dispatched: dispatchedCount });
+    // ─── PART 3: Workflow Message Queue (Action processing) ────
+    const { data: queuedMessages } = await supabase
+      .from('message_queue')
+      .select('*, contacts(line_id, name, tags)')
+      .eq('status', 'queued')
+      .lte('scheduled_at', now)
+      .order('scheduled_at', { ascending: true })
+      .limit(50);
 
-  } catch (error: unknown) {
-    console.error("Cron Job Error:", error);
+    if (queuedMessages && queuedMessages.length > 0) {
+      for (const msg of queuedMessages) {
+        const lineId = (msg as any).contacts?.line_id;
+        if (!lineId) {
+          await supabase.from('message_queue').update({ status: 'failed', sent_at: now }).eq('id', msg.id);
+          totalFailed++;
+          continue;
+        }
+
+        let actionSuccess = false;
+
+        // Tag Action
+        if (msg.message.startsWith('__ACTION__:')) {
+          const parts = msg.message.split(':');
+          const actionType = parts[1]; 
+          const actionValue = parts.slice(2).join(':'); 
+          const currentTags = (msg as any).contacts?.tags || [];
+
+          if (actionType === 'ADD_TAG' && !currentTags.includes(actionValue)) {
+            await supabase.from('contacts').update({ tags: [...currentTags, actionValue] }).eq('id', msg.contact_id);
+            await supabase.from('contact_history').insert({ contact_id: msg.contact_id, action: `Tag Added [Workflow]: ${actionValue}` });
+          } else if (actionType === 'REMOVE_TAG') {
+            const newTags = currentTags.filter((t: string) => t !== actionValue);
+            await supabase.from('contacts').update({ tags: newTags }).eq('id', msg.contact_id);
+            await supabase.from('contact_history').insert({ contact_id: msg.contact_id, action: `Tag Removed [Workflow]: ${actionValue}` });
+          }
+          actionSuccess = true;
+        } else {
+          // Send LINE Message
+          actionSuccess = await sendLineMessage(lineToken, lineId, msg.message);
+          if (actionSuccess) {
+            await supabase.from('contact_history').insert({ contact_id: msg.contact_id, action: `Chat: [Auto] ${msg.message}` });
+          }
+        }
+
+        if (actionSuccess) {
+          await supabase.from('message_queue').update({ status: 'sent', sent_at: now }).eq('id', msg.id);
+          totalSent++;
+
+          // ─── TRIGGER NEXT NODE ──────────────────────────────
+          // After a step is finished, we find the next node and execute it
+          if (msg.enrollment_id && msg.step_id) {
+             const { data: nextSteps } = await supabase
+               .from('workflow_steps')
+               .select('id')
+               .eq('parent_id', msg.step_id)
+               .eq('branch_type', 'DEFAULT');
+             
+             if (nextSteps && nextSteps.length > 0) {
+               for (const next of nextSteps) {
+                 await executeWorkflowNode(msg.enrollment_id, next.id);
+               }
+             } else {
+               // If no next steps, check if this branch is done
+               // (Optional: can be handled by a final check)
+             }
+          }
+        } else {
+          await supabase.from('message_queue').update({ status: 'failed', sent_at: now }).eq('id', msg.id);
+          totalFailed++;
+        }
+      }
+    }
+
+    // ─── PART 4: Contact Follow-Up Scheduler ───────────────────
+    const { data: dueFollowUps } = await supabase
+      .from('contacts')
+      .select('id, line_id, name, follow_up_note')
+      .not('follow_up_at', 'is', null)
+      .lte('follow_up_at', now)
+      .not('line_id', 'is', null);
+
+    if (dueFollowUps && dueFollowUps.length > 0) {
+      for (const contact of dueFollowUps) {
+        const message = contact.follow_up_note?.trim()
+          ? contact.follow_up_note
+          : `Follow-up reminder for ${contact.name || 'this contact'}.`;
+
+        const ok = await sendLineMessage(lineToken, contact.line_id, message);
+        if (ok) {
+          // Clear follow_up_at so it doesn't fire again
+          await supabase
+            .from('contacts')
+            .update({ follow_up_at: null, follow_up_note: null })
+            .eq('id', contact.id);
+          await supabase.from('contact_history').insert({
+            contact_id: contact.id,
+            action: `Chat: [Follow-Up] ${message}`,
+          });
+          totalSent++;
+        } else {
+          totalFailed++;
+        }
+      }
+    }
+
+    // ─── PART 5: Webinar Sequence Messages ─────────────────────
+    const { data: dueWebinar } = await supabase
+      .from('webinar_scheduled_messages')
+      .select(`
+        id, contact_id,
+        webinar_sequence_steps(message),
+        contacts(line_id, name, webinar_link, webinar_date)
+      `)
+      .eq('status', 'pending')
+      .lte('scheduled_at', now)
+      .order('scheduled_at', { ascending: true })
+      .limit(50);
+
+    for (const msg of dueWebinar || []) {
+      const contact = (msg as any).contacts;
+      const step = (msg as any).webinar_sequence_steps;
+      if (!contact?.line_id || !step?.message) {
+        await supabase.from('webinar_scheduled_messages').update({ status: 'failed' }).eq('id', msg.id);
+        totalFailed++;
+        continue;
+      }
+
+      const { renderMessage } = await import('@/lib/render-message');
+      const message = await renderMessage(step.message, contact);
+
+      const ok = await sendLineMessage(lineToken, contact.line_id, message);
+      if (ok) {
+        await supabase.from('webinar_scheduled_messages')
+          .update({ status: 'sent', sent_at: now })
+          .eq('id', msg.id);
+        await supabase.from('contact_history').insert({
+          contact_id: msg.contact_id,
+          action: `Chat: [Webinar Reminder] ${message.substring(0, 100)}`,
+        });
+        totalSent++;
+      } else {
+        await supabase.from('webinar_scheduled_messages').update({ status: 'failed' }).eq('id', msg.id);
+        totalFailed++;
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      sent: totalSent,
+      failed: totalFailed,
+      timestamp: now,
+    });
+
+  } catch (error) {
+    console.error('Cron Dispatch Error:', error);
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+async function sendLineMessage(token: string, lineId: string, message: string): Promise<boolean> {
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ to: lineId, messages: [{ type: 'text', text: message }] }),
+    });
+    return response.ok;
+  } catch {
+    return false;
   }
 }
