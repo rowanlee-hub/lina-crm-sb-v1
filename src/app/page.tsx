@@ -2408,9 +2408,12 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
 
   const createWorkflow = async () => {
     if (!wfName.trim()) return;
-    const res = await fetch('/api/workflows', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: wfName, description: wfDesc, trigger_type: wfTrigger, trigger_value: wfTriggerVal }) });
-    const data = await res.json();
-    if (data.success) { setWorkflows([{ ...data.workflow, step_count: 0, active_enrollments: 0 }, ...workflows]); setShowWfForm(false); setWfName(''); setWfDesc(''); setWfTriggerVal(''); }
+    try {
+      const res = await fetch('/api/workflows', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: wfName, description: wfDesc, trigger_type: wfTrigger, trigger_value: wfTriggerVal }) });
+      const data = await res.json();
+      if (data.success) { setWorkflows([{ ...data.workflow, step_count: 0, active_enrollments: 0 }, ...workflows]); setShowWfForm(false); setWfName(''); setWfDesc(''); setWfTriggerVal(''); }
+      else { alert(`Failed: ${data.error || 'Unknown error'}`); }
+    } catch (e: any) { alert(`Error: ${e.message}`); }
   };
 
   const deleteWorkflow = async (id: string) => {
@@ -2452,20 +2455,22 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
       payload.send_time = stepTime;
     }
 
-    const res = await fetch('/api/workflows/steps', { 
-      method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify(payload) 
-    });
-    const data = await res.json();
-    if (data.success) { 
-      setSteps([...steps, { ...data.step, day_name: stepDay !== undefined ? DAY_NAMES[stepDay] : undefined }]); 
-      setShowStepForm(false); 
-      setStepMessage(''); 
-      setStepTagVal(''); 
-      setNewParentId(undefined);
-      setNewBranchType('DEFAULT');
-    }
+    try {
+      const res = await fetch('/api/workflows/steps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSteps([...steps, { ...data.step, day_name: stepDay !== undefined ? DAY_NAMES[stepDay] : undefined }]);
+        setShowStepForm(false);
+        setStepMessage('');
+        setStepTagVal('');
+        setNewParentId(undefined);
+        setNewBranchType('DEFAULT');
+      } else { alert(`Failed to add step: ${data.error || 'Unknown error'}`); }
+    } catch (e: any) { alert(`Error: ${e.message}`); }
   };
 
   const deleteStep = async (id: string) => {
@@ -2475,9 +2480,12 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
 
   const createRule = async () => {
     if (!ruleName.trim()) return;
-    const res = await fetch('/api/automations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: ruleName, trigger_type: ruleTriggerType, trigger_value: ruleTriggerVal, action_type: ruleActionType, action_value: ruleActionVal, is_active: true }) });
-    const data = await res.json();
-    if (data.success) { setAutomations([data.automation, ...automations]); setShowRuleForm(false); setRuleName(''); setRuleTriggerVal(''); setRuleActionVal(''); }
+    try {
+      const res = await fetch('/api/automations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: ruleName, trigger_type: ruleTriggerType, trigger_value: ruleTriggerVal, action_type: ruleActionType, action_value: ruleActionVal, is_active: true }) });
+      const data = await res.json();
+      if (data.success) { setAutomations([data.automation, ...automations]); setShowRuleForm(false); setRuleName(''); setRuleTriggerVal(''); setRuleActionVal(''); }
+      else { alert(`Failed: ${data.error || 'Unknown error'}`); }
+    } catch (e: any) { alert(`Error: ${e.message}`); }
   };
 
   const deleteRule = async (id: string) => {
@@ -2495,12 +2503,16 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
     try {
       const res = await fetch('/api/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newTemplateName.trim(), content: newTemplateContent.trim() }) });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.template) {
         setAvailableTemplates(prev => [data.template, ...prev]);
         setNewTemplateName('');
         setNewTemplateContent('');
         setPreviewTemplate('');
+      } else {
+        alert(`Failed to create template: ${data.error || 'Unknown error'}`);
       }
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
     } finally {
       setIsSavingTemplate(false);
     }
@@ -2510,18 +2522,30 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
     if (!editingTemplate) return;
     setIsSavingTemplate(true);
     try {
-      await fetch('/api/templates', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingTemplate.id, name: editingTemplate.name, content: editingTemplate.content }) });
-      setAvailableTemplates(prev => prev.map(t => t.id === editingTemplate.id ? { ...t, ...editingTemplate } : t));
-      setEditingTemplate(null);
+      const res = await fetch('/api/templates', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingTemplate.id, name: editingTemplate.name, content: editingTemplate.content }) });
+      const data = await res.json();
+      if (res.ok) {
+        setAvailableTemplates(prev => prev.map(t => t.id === editingTemplate.id ? { ...t, ...editingTemplate } : t));
+        setEditingTemplate(null);
+      } else {
+        alert(`Failed to save: ${data.error || res.statusText}`);
+      }
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
     } finally {
       setIsSavingTemplate(false);
     }
   };
 
   const deleteTemplate = async (id: string) => {
-    await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
-    setAvailableTemplates(prev => prev.filter(t => t.id !== id));
-    if (editingTemplate?.id === id) setEditingTemplate(null);
+    if (!confirm('Delete this template?')) return;
+    try {
+      await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
+      setAvailableTemplates(prev => prev.filter(t => t.id !== id));
+      if (editingTemplate?.id === id) setEditingTemplate(null);
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
+    }
   };
 
   const renderPreview = (content: string) => {
@@ -3328,11 +3352,11 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                           : await fetch('/api/webinar-sequence', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ sequence_id: seqId, days_before: wbDaysBefore, send_hour: wbSendHour, message: wbMessage }) });
                         const data = await res.json();
-                        if (!res.ok || data.success === false) { alert(`Save failed: ${data.error || res.statusText}`); return; }
+                        if (!res.ok || data.success === false) { alert(`Save failed: ${data.error || res.statusText}`); setWbSaving(false); return; }
                         setWbStepForm(false); setWbEditingStep(null);
                         fetchWebinarData();
                       } catch (e: any) { alert(`Save error: ${e.message}`); }
-                      setWbSaving(false);
+                      finally { setWbSaving(false); }
                     }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
                       {wbSaving ? 'Saving…' : 'Save Step'}
                     </button>
