@@ -95,6 +95,7 @@ function CRMDashboard() {
   const [editingCell, setEditingCell] = useState<{ contactId: string; field: string } | null>(null);
   const [cellDraft, setCellDraft] = useState('');
   const [savingCell, setSavingCell] = useState<string | null>(null);
+  const [sheetCopied, setSheetCopied] = useState<string | null>(null);
 
   // Fetch contacts on mount + real-time subscriptions
   useEffect(() => {
@@ -179,6 +180,8 @@ function CRMDashboard() {
       updatedContact = { ...contact, tags };
     } else if (field === 'notes') {
       updatedContact = { ...contact, notes: value };
+    } else if (field === 'webinarLink') {
+      updatedContact = { ...contact, webinar: { ...contact.webinar, link: value } };
     } else {
       updatedContact = { ...contact, [field]: value };
     }
@@ -764,7 +767,7 @@ function CRMDashboard() {
 
             {/* Sheet table */}
             <div className="flex-1 overflow-auto">
-              <table className="w-full text-sm border-collapse min-w-[1100px]">
+              <table className="w-full text-sm border-collapse min-w-[1300px]">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-8">#</th>
@@ -774,6 +777,7 @@ function CRMDashboard() {
                       { key: 'phone',        label: 'Phone',        w: '140px' },
                       { key: 'tags',         label: 'Tags',         w: '220px' },
                       { key: 'status',       label: 'Status',       w: '110px' },
+                      { key: 'webinarLink',  label: 'Webinar Link', w: '200px' },
                       { key: 'notes',        label: 'Notes',        w: '220px' },
                       { key: 'lineId',       label: 'LINE ID',      w: '150px' },
                     ].map(col => (
@@ -785,10 +789,18 @@ function CRMDashboard() {
                 <tbody>
                   {filteredContacts.map((contact, idx) => {
                     const STATUSES = ['Lead', 'Nurturing', 'Customer', 'Closed'];
+                    const copyToClipboard = (text: string, key: string) => {
+                      if (!text) return;
+                      navigator.clipboard.writeText(text);
+                      setSheetCopied(key);
+                      setTimeout(() => setSheetCopied(null), 1500);
+                    };
+
                     const renderCell = (field: string, displayValue: string) => {
                       const cellKey = `${contact.id}:${field}`;
                       const isEditing = editingCell?.contactId === contact.id && editingCell?.field === field;
                       const isSaving = savingCell === cellKey;
+                      const isCopied = sheetCopied === cellKey;
 
                       if (isSaving) {
                         return <span className="text-slate-400 italic text-xs">Saving…</span>;
@@ -832,13 +844,24 @@ function CRMDashboard() {
                         );
                       }
                       return (
-                        <span
-                          onClick={() => { setEditingCell({ contactId: contact.id, field }); setCellDraft(displayValue); }}
-                          className="block w-full min-h-[22px] cursor-text hover:bg-blue-50 rounded px-1 py-0.5 truncate text-xs text-slate-700"
-                          title={displayValue || 'Click to edit'}
-                        >
-                          {displayValue || <span className="text-slate-300 italic">—</span>}
-                        </span>
+                        <div className="group/cell flex items-center gap-1 w-full min-h-[22px]">
+                          <span
+                            onClick={() => { setEditingCell({ contactId: contact.id, field }); setCellDraft(displayValue); }}
+                            className="flex-1 cursor-text hover:bg-blue-50 rounded px-1 py-0.5 truncate text-xs text-slate-700 min-w-0"
+                            title={displayValue || 'Click to edit'}
+                          >
+                            {displayValue || <span className="text-slate-300 italic">—</span>}
+                          </span>
+                          {displayValue && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); copyToClipboard(displayValue, cellKey); }}
+                              className={`shrink-0 p-0.5 rounded transition-all ${isCopied ? 'text-green-500' : 'text-slate-300 opacity-0 group-hover/cell:opacity-100 hover:text-blue-500'}`}
+                              title="Copy"
+                            >
+                              {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          )}
+                        </div>
                       );
                     };
 
@@ -866,9 +889,21 @@ function CRMDashboard() {
                             </span>
                           )}
                         </td>
+                        <td className="px-2 py-1.5 border-l border-slate-100 max-w-[200px]">{renderCell('webinarLink', contact.webinar?.link || '')}</td>
                         <td className="px-2 py-1.5 border-l border-slate-100 max-w-[220px]">{renderCell('notes', contact.notes || '')}</td>
                         <td className="px-2 py-1.5 border-l border-slate-100">
-                          <span className="text-xs text-slate-400 font-mono truncate block">{contact.lineId ? `${contact.lineId.substring(0, 12)}…` : <span className="text-slate-200 italic">—</span>}</span>
+                          <div className="group/cell flex items-center gap-1">
+                            <span className="text-xs text-slate-400 font-mono truncate">{contact.lineId ? `${contact.lineId.substring(0, 12)}…` : <span className="text-slate-200 italic">—</span>}</span>
+                            {contact.lineId && (
+                              <button
+                                onClick={() => copyToClipboard(contact.lineId, `${contact.id}:lineId`)}
+                                className={`shrink-0 p-0.5 rounded transition-all ${sheetCopied === `${contact.id}:lineId` ? 'text-green-500' : 'text-slate-300 opacity-0 group-hover/cell:opacity-100 hover:text-blue-500'}`}
+                                title="Copy LINE ID"
+                              >
+                                {sheetCopied === `${contact.id}:lineId` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-2 py-1.5 border-l border-slate-100">
                           <button onClick={() => handleContactClick(contact.id)} className="text-[10px] text-blue-500 hover:text-blue-700 font-bold" title="Open detail">
