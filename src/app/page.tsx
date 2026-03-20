@@ -3499,59 +3499,92 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
 }
 
 // ============================================================================
-// LINE MATCH VIEW — import CSV to link LINE IDs to contacts by email
+// LINE IMPORT VIEW — CSV import: line_id + optional email/name/webinar fields
 // ============================================================================
+type ImportRow = { line_id: string; email: string; display_name: string; webinar_date: string; webinar_link: string };
+type RowResult = ImportRow & { status: 'created' | 'linked' | 'updated' | 'skipped' | 'already_had' };
+
 function LineMatchView() {
-  type RowResult = { email: string; line_id: string; status: 'linked' | 'skipped' | 'not_found' | 'already_had' };
-  const [rows, setRows] = useState<Array<{ email: string; line_id: string }>>([]);
-  const [preview, setPreview] = useState<Array<{ email: string; line_id: string }>>([]);
+  const [rows, setRows] = useState<ImportRow[]>([]);
+  const [preview, setPreview] = useState<ImportRow[]>([]);
   const [results, setResults] = useState<RowResult[] | null>(null);
+  const [summary, setSummary] = useState<{ created: number; linked: number; updated: number; already_had: number; skipped: number } | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [parseError, setParseError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const statusLabel: Record<RowResult['status'], string> = {
-    linked: 'Linked',
-    already_had: 'Already linked',
-    not_found: 'Not found',
+  const STATUS_LABEL: Record<RowResult['status'], string> = {
+    created: 'Created',
+    linked: 'LINE ID linked',
+    updated: 'Updated',
+    already_had: 'No change',
     skipped: 'Skipped',
   };
-  const statusColor: Record<RowResult['status'], string> = {
+  const STATUS_COLOR: Record<RowResult['status'], string> = {
+    created: 'text-blue-600 bg-blue-50',
     linked: 'text-green-600 bg-green-50',
+    updated: 'text-teal-600 bg-teal-50',
     already_had: 'text-amber-600 bg-amber-50',
-    not_found: 'text-red-600 bg-red-50',
     skipped: 'text-slate-500 bg-slate-100',
   };
 
+  const parseCSV = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let cur = '', inQ = false;
+    const cells: string[] = [];
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cells.push(cur.trim()); cur = ''; }
+      else if ((ch === '\n' || ch === '\r') && !inQ) {
+        cells.push(cur.trim()); cur = '';
+        if (cells.some(c => c)) rows.push([...cells]);
+        cells.length = 0;
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+      } else { cur += ch; }
+    }
+    if (cur || cells.length) { cells.push(cur.trim()); if (cells.some(c => c)) rows.push(cells); }
+    return rows;
+  };
+
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setParseError('');
-    setResults(null);
+    setParseError(''); setResults(null); setSummary(null);
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) { setParseError('File appears empty or has no data rows.'); return; }
+      const allRows = parseCSV(text);
+      if (allRows.length < 2) { setParseError('File appears empty or has no data rows.'); return; }
 
-      // Detect header
-      const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
-      const emailIdx = header.findIndex(h => h === 'email');
-      const lineIdIdx = header.findIndex(h => ['line_id', 'lineid', 'line id', 'userid', 'user_id'].includes(h));
+      const header = allRows[0].map(h => h.toLowerCase().replace(/^"|"$/g, '').trim());
+      const col = (names: string[]) => header.findIndex(h => names.includes(h));
 
-      if (emailIdx === -1 || lineIdIdx === -1) {
-        setParseError(`Could not find "email" and "line_id" columns. Found columns: ${header.join(', ')}`);
+      const lineIdIdx   = col(['user_id', 'userid', 'line_id', 'lineid', 'line id']);
+      const emailIdx    = col(['email']);
+      const nameIdx     = col(['display_name', 'displayname', 'display name', 'name']);
+      const wDateIdx    = col(['webinar_date', 'webinardate', 'webinar date', 'date']);
+      const wLinkIdx    = col(['webinar_link', 'webinarlink', 'webinar link', 'link']);
+
+      if (lineIdIdx === -1) {
+        setParseError(`Required column not found. Need one of: user_id, userid, line_id. Found: ${header.join(', ')}`);
         return;
       }
 
-      const parsed: Array<{ email: string; line_id: string }> = [];
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-        const email = cols[emailIdx]?.toLowerCase() || '';
-        const lineId = cols[lineIdIdx] || '';
-        if (email || lineId) parsed.push({ email, line_id: lineId });
+      const parsed: ImportRow[] = [];
+      for (let i = 1; i < allRows.length; i++) {
+        const c = allRows[i];
+        const lineId = (c[lineIdIdx] || '').replace(/^"|"$/g, '').trim();
+        if (!lineId) continue;
+        parsed.push({
+          line_id: lineId,
+          email: emailIdx >= 0 ? (c[emailIdx] || '').replace(/^"|"$/g, '').trim().toLowerCase() : '',
+          display_name: nameIdx >= 0 ? (c[nameIdx] || '').replace(/^"|"$/g, '').trim() : '',
+          webinar_date: wDateIdx >= 0 ? (c[wDateIdx] || '').replace(/^"|"$/g, '').trim() : '',
+          webinar_link: wLinkIdx >= 0 ? (c[wLinkIdx] || '').replace(/^"|"$/g, '').trim() : '',
+        });
       }
-      if (parsed.length === 0) { setParseError('No valid rows found.'); return; }
+      if (parsed.length === 0) { setParseError('No valid rows found (line_id column was empty for all rows).'); return; }
       setRows(parsed);
       setPreview(parsed.slice(0, 5));
     };
@@ -3560,8 +3593,7 @@ function LineMatchView() {
 
   const handleRun = async () => {
     if (rows.length === 0) return;
-    setIsRunning(true);
-    setResults(null);
+    setIsRunning(true); setResults(null); setSummary(null);
     try {
       const res = await fetch('/api/contacts/link-line-id', {
         method: 'POST',
@@ -3571,6 +3603,7 @@ function LineMatchView() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed');
       setResults(data.results);
+      setSummary({ created: data.created, linked: data.linked, updated: data.updated, already_had: data.already_had, skipped: data.skipped });
     } catch (err: unknown) {
       setParseError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -3579,24 +3612,39 @@ function LineMatchView() {
   };
 
   const reset = () => {
-    setRows([]);
-    setPreview([]);
-    setResults(null);
-    setParseError('');
+    setRows([]); setPreview([]); setResults(null); setSummary(null); setParseError('');
     if (fileRef.current) fileRef.current.value = '';
   };
 
-  const linked = results?.filter(r => r.status === 'linked').length ?? 0;
-  const alreadyHad = results?.filter(r => r.status === 'already_had').length ?? 0;
-  const notFound = results?.filter(r => r.status === 'not_found').length ?? 0;
-
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Link LINE IDs</h2>
-          <p className="text-slate-500 mt-1 text-sm">Upload a CSV with <code className="bg-slate-100 px-1 rounded text-xs">email</code> and <code className="bg-slate-100 px-1 rounded text-xs">line_id</code> columns. Only contacts without a LINE ID will be updated — existing links are never replaced.</p>
+          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">LINE Contact Import</h2>
+          <p className="text-slate-500 mt-1 text-sm leading-relaxed">
+            Upload a CSV exported from LINE or your webinar platform. Contacts are matched by <strong>line_id (user_id)</strong> first, then by <strong>email</strong> if provided.
+            New contacts are created for unmatched rows. Existing data is never overwritten — only blank fields are filled in.
+          </p>
+        </div>
+
+        {/* Column guide */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Expected CSV columns</p>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {[
+              { col: 'user_id / line_id', note: 'Required — LINE user ID', req: true },
+              { col: 'email', note: 'Optional — used for matching', req: false },
+              { col: 'display_name / name', note: 'Optional — stored as contact name', req: false },
+              { col: 'webinar_date', note: 'Optional — format: 2026-03-25', req: false },
+              { col: 'webinar_link', note: 'Optional — full URL', req: false },
+            ].map(({ col, note, req }) => (
+              <div key={col} className="flex items-start gap-2">
+                <code className={`px-1.5 py-0.5 rounded text-xs font-mono shrink-0 ${req ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{col}</code>
+                <span className="text-slate-400">{note}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Upload card */}
@@ -3608,7 +3656,7 @@ function LineMatchView() {
             >
               <Upload className="w-8 h-8 text-slate-300" />
               <p className="text-sm font-semibold text-slate-500">Click to upload CSV</p>
-              <p className="text-xs text-slate-400">Required columns: <strong>email</strong>, <strong>line_id</strong></p>
+              <p className="text-xs text-slate-400">Accepts .csv files — column order doesn't matter</p>
               <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
             </div>
 
@@ -3621,26 +3669,32 @@ function LineMatchView() {
 
             {preview.length > 0 && (
               <div className="space-y-3">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{rows.length} rows loaded — preview</p>
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="text-left px-3 py-2 text-xs text-slate-400 font-semibold border-b border-slate-100">Email</th>
-                      <th className="text-left px-3 py-2 text-xs text-slate-400 font-semibold border-b border-slate-100">LINE User ID</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.map((r, i) => (
-                      <tr key={i} className="border-b border-slate-50">
-                        <td className="px-3 py-2 text-slate-700 truncate max-w-[180px]">{r.email}</td>
-                        <td className="px-3 py-2 text-slate-500 font-mono text-xs truncate">{r.line_id}</td>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{rows.length} rows loaded — preview (first 5)</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50">
+                        {['LINE User ID', 'Email', 'Display Name', 'Webinar Date', 'Webinar Link'].map(h => (
+                          <th key={h} className="text-left px-3 py-2 text-slate-400 font-semibold border-b border-slate-100 whitespace-nowrap">{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                    {rows.length > 5 && (
-                      <tr><td colSpan={2} className="px-3 py-2 text-xs text-slate-400 italic">…and {rows.length - 5} more rows</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {preview.map((r, i) => (
+                        <tr key={i} className="border-b border-slate-50">
+                          <td className="px-3 py-2 font-mono text-slate-600 max-w-[120px] truncate">{r.line_id}</td>
+                          <td className="px-3 py-2 text-slate-500 max-w-[140px] truncate">{r.email || <span className="text-slate-300 italic">—</span>}</td>
+                          <td className="px-3 py-2 text-slate-600 max-w-[120px] truncate">{r.display_name || <span className="text-slate-300 italic">—</span>}</td>
+                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{r.webinar_date || <span className="text-slate-300 italic">—</span>}</td>
+                          <td className="px-3 py-2 text-slate-400 max-w-[100px] truncate">{r.webinar_link || <span className="text-slate-300 italic">—</span>}</td>
+                        </tr>
+                      ))}
+                      {rows.length > 5 && (
+                        <tr><td colSpan={5} className="px-3 py-2 text-xs text-slate-400 italic">…and {rows.length - 5} more rows</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
                 <div className="flex gap-3 pt-1">
                   <button
@@ -3649,7 +3703,7 @@ function LineMatchView() {
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50 transition-all"
                   >
                     {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitMerge className="w-4 h-4" />}
-                    {isRunning ? 'Linking…' : `Link ${rows.length} contacts`}
+                    {isRunning ? 'Importing…' : `Import ${rows.length} rows`}
                   </button>
                   <button onClick={reset} className="px-4 py-2.5 border border-slate-200 text-slate-500 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-all">
                     Clear
@@ -3661,18 +3715,20 @@ function LineMatchView() {
         )}
 
         {/* Results */}
-        {results && (
+        {results && summary && (
           <div className="space-y-4">
-            {/* Summary */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Summary cards */}
+            <div className="grid grid-cols-5 gap-2">
               {[
-                { label: 'Linked', value: linked, color: 'text-green-600', bg: 'bg-green-50 border-green-100' },
-                { label: 'Already linked', value: alreadyHad, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-100' },
-                { label: 'Not found', value: notFound, color: 'text-red-500', bg: 'bg-red-50 border-red-100' },
+                { label: 'Created', value: summary.created, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
+                { label: 'ID Linked', value: summary.linked, color: 'text-green-600', bg: 'bg-green-50 border-green-100' },
+                { label: 'Updated', value: summary.updated, color: 'text-teal-600', bg: 'bg-teal-50 border-teal-100' },
+                { label: 'No change', value: summary.already_had, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-100' },
+                { label: 'Skipped', value: summary.skipped, color: 'text-slate-500', bg: 'bg-slate-50 border-slate-200' },
               ].map(s => (
-                <div key={s.label} className={`rounded-xl border p-4 ${s.bg} flex flex-col items-center`}>
-                  <span className={`text-3xl font-extrabold ${s.color}`}>{s.value}</span>
-                  <span className="text-xs text-slate-500 font-semibold mt-1">{s.label}</span>
+                <div key={s.label} className={`rounded-xl border p-3 ${s.bg} flex flex-col items-center`}>
+                  <span className={`text-2xl font-extrabold ${s.color}`}>{s.value}</span>
+                  <span className="text-[10px] text-slate-500 font-semibold mt-0.5 text-center leading-tight">{s.label}</span>
                 </div>
               ))}
             </div>
@@ -3680,26 +3736,30 @@ function LineMatchView() {
             {/* Detail table */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-700">All results</span>
+                <span className="text-sm font-bold text-slate-700">All results ({results.length})</span>
                 <button onClick={reset} className="text-xs text-blue-600 hover:underline font-semibold">Upload another</button>
               </div>
-              <div className="overflow-y-auto max-h-[400px]">
-                <table className="w-full text-sm">
+              <div className="overflow-auto max-h-[420px]">
+                <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-white border-b border-slate-100">
                     <tr>
-                      <th className="text-left px-4 py-2 text-xs text-slate-400 font-semibold">Email</th>
-                      <th className="text-left px-4 py-2 text-xs text-slate-400 font-semibold">LINE User ID</th>
-                      <th className="text-left px-4 py-2 text-xs text-slate-400 font-semibold">Result</th>
+                      <th className="text-left px-4 py-2 text-slate-400 font-semibold whitespace-nowrap">LINE User ID</th>
+                      <th className="text-left px-4 py-2 text-slate-400 font-semibold">Email</th>
+                      <th className="text-left px-4 py-2 text-slate-400 font-semibold">Name</th>
+                      <th className="text-left px-4 py-2 text-slate-400 font-semibold whitespace-nowrap">Webinar Date</th>
+                      <th className="text-left px-4 py-2 text-slate-400 font-semibold">Result</th>
                     </tr>
                   </thead>
                   <tbody>
                     {results.map((r, i) => (
                       <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50">
-                        <td className="px-4 py-2 text-slate-700 truncate max-w-[160px]">{r.email}</td>
-                        <td className="px-4 py-2 text-slate-500 font-mono text-xs truncate">{r.line_id}</td>
+                        <td className="px-4 py-2 font-mono text-slate-500 max-w-[110px] truncate">{r.line_id}</td>
+                        <td className="px-4 py-2 text-slate-600 max-w-[140px] truncate">{r.email || <span className="text-slate-300">—</span>}</td>
+                        <td className="px-4 py-2 text-slate-600 max-w-[110px] truncate">{r.display_name || <span className="text-slate-300">—</span>}</td>
+                        <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{r.webinar_date || <span className="text-slate-300">—</span>}</td>
                         <td className="px-4 py-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${statusColor[r.status]}`}>
-                            {statusLabel[r.status]}
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_COLOR[r.status]}`}>
+                            {STATUS_LABEL[r.status]}
                           </span>
                         </td>
                       </tr>
