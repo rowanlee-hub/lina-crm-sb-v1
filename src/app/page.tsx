@@ -532,7 +532,14 @@ function CRMDashboard() {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Syncing CRM...</p>
               </div>
             ) : (
-              (activeTab === 'inbox' ? contacts.filter(c => c.lineId) : filteredContacts).map(contact => {
+              (activeTab === 'inbox'
+                ? contacts.filter(c => c.lineId).sort((a, b) => {
+                    const aDate = a.history?.[0]?.date ?? a.id;
+                    const bDate = b.history?.[0]?.date ?? b.id;
+                    return aDate < bDate ? 1 : aDate > bDate ? -1 : 0;
+                  })
+                : filteredContacts
+              ).map(contact => {
                 const lastMsg = contact.history?.[0];
                 const lastSeen = lastSeenAt[contact.id];
                 const hasUnread = activeTab === 'inbox' && lastMsg?.date &&
