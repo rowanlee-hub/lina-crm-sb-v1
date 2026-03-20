@@ -1709,7 +1709,7 @@ function MessageList({ history }: { history: HistoryItem[] }) {
       items.push(
         <div key={i} className="flex flex-col items-start w-full">
           <div className="max-w-[78%] bg-white text-slate-800 px-4 py-2.5 rounded-2xl rounded-tl-sm shadow-sm border border-slate-200">
-            <p className="text-[15px] leading-relaxed break-words">{text}</p>
+            <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{text}</p>
           </div>
           <span className="text-[10px] text-white/60 mt-1 ml-1">{time}</span>
         </div>
@@ -1718,7 +1718,7 @@ function MessageList({ history }: { history: HistoryItem[] }) {
       items.push(
         <div key={i} className="flex flex-col items-end w-full">
           <div className={`max-w-[78%] px-4 py-2.5 rounded-2xl rounded-tr-sm shadow-md break-words border ${isAuto ? 'bg-amber-500 text-white border-amber-600' : 'bg-[#06c755] text-white border-[#05b54d]'}`}>
-            <p className="text-[15px] leading-relaxed">{text}{isAuto && <Bell className="inline w-3 h-3 ml-1.5 opacity-70" />}</p>
+            <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{text}{isAuto && <Bell className="inline w-3 h-3 ml-1.5 opacity-70" />}</p>
           </div>
           <div className="flex items-center gap-1.5 mt-1 mr-1">
             <span className="text-[10px] text-white/60">{time}</span>
