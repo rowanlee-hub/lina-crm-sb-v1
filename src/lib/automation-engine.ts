@@ -114,13 +114,27 @@ async function executeAddTag(contactId: string, tag: string, lineId: string) {
 
 async function executeEnrollWebinar(contactId: string) {
   const { data: contact } = await supabase.from('contacts').select('webinar_date, name').eq('id', contactId).single();
-  if (!contact?.webinar_date) {
-    console.log(`[AutomationEngine] No webinar_date set for contact ${contactId}, skipping enroll`);
+
+  let webinarDate = contact?.webinar_date;
+
+  // If contact has no webinar_date, fall back to active_webinar_date from settings
+  if (!webinarDate) {
+    const { data: setting } = await supabase.from('settings').select('value').eq('key', 'active_webinar_date').single();
+    webinarDate = setting?.value || null;
+    if (webinarDate) {
+      // Stamp the contact with the active webinar date so sequence + UI are in sync
+      await supabase.from('contacts').update({ webinar_date: webinarDate }).eq('id', contactId);
+      console.log(`[AutomationEngine] Assigned active_webinar_date ${webinarDate} to contact ${contactId}`);
+    }
+  }
+
+  if (!webinarDate) {
+    console.log(`[AutomationEngine] No webinar_date available for contact ${contactId}, skipping enroll`);
     return;
   }
 
   const { enrollInWebinarSequence } = await import('./webinar-sequence');
-  await enrollInWebinarSequence(contactId, contact.webinar_date, contact.name || '');
+  await enrollInWebinarSequence(contactId, webinarDate, contact?.name || '');
   console.log(`[AutomationEngine] Enrolled contact ${contactId} in webinar sequence`);
 }
 
