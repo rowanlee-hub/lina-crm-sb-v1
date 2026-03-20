@@ -289,6 +289,15 @@ function CRMDashboard() {
     try { localStorage.setItem('lina_inbox_seen', JSON.stringify(updated)); } catch {}
   };
 
+  const goToInbox = (id: string) => {
+    setSelectedContactId(id);
+    setActiveTab('inbox');
+    router.push(`/?tab=inbox&id=${id}`);
+    const updated = { ...lastSeenAt, [id]: new Date().toISOString() };
+    setLastSeenAt(updated);
+    try { localStorage.setItem('lina_inbox_seen', JSON.stringify(updated)); } catch {}
+  };
+
   const handleBackToList = () => {
     setView("list");
     setSelectedContactId(null);
@@ -588,6 +597,13 @@ function CRMDashboard() {
                                 ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">UPCOMING</span>
                                 : <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500">PAST</span>
                             )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); if (contact.lineId) goToInbox(contact.id); }}
+                              title={contact.lineId ? 'Open LINE chat' : 'No LINE ID'}
+                              className={`opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 p-1 rounded-full ${contact.lineId ? 'text-[#06c755] hover:bg-emerald-50' : 'text-slate-300 cursor-not-allowed'}`}
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </button>
                           </>}
                         </div>
                       </div>
@@ -892,12 +908,13 @@ function CRMDashboard() {
                  }}
                />
             ) : (
-               <ContactDetailView 
-                 contactData={activeContact} 
+               <ContactDetailView
+                 contactData={activeContact}
                  onBack={() => setView('list')}
                  isNew={isNew}
                  allContacts={contacts}
                  onSwitchContact={handleContactClick}
+                 onGoToInbox={goToInbox}
                  onSaveSuccess={(updatedContact: Contact) => {
                    // Use functional update to always read latest state (avoids stale closure duplicates)
                    setContacts(prev => {
@@ -926,6 +943,7 @@ function CRMDashboard() {
 // Single Contact Detail View Component
 // ----------------------------------------------------------------------------
 interface ContactDetailViewProps {
+  onGoToInbox?: (id: string) => void;
   contactData: Contact;
   onBack: () => void;
   onSaveSuccess: (updatedContact: Contact) => void;
@@ -934,7 +952,7 @@ interface ContactDetailViewProps {
   onSwitchContact: (id: string) => void;
 }
 
-function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allContacts, onSwitchContact }: ContactDetailViewProps) {
+function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allContacts, onSwitchContact, onGoToInbox }: ContactDetailViewProps) {
   const safeContactData: Contact = {
       ...contactData,
       tags: contactData.tags || [],
@@ -1361,6 +1379,15 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                         />
                       </div>
                       {copyIcon(contact.lineId, 'lineId')}
+                      <button
+                        onClick={() => contact.lineId && onGoToInbox && onGoToInbox(contact.id)}
+                        disabled={!contact.lineId}
+                        title={contact.lineId ? 'Open LINE chat' : 'No LINE ID linked'}
+                        className={`ml-2 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all shrink-0 ${contact.lineId ? 'bg-[#06c755] text-white hover:bg-[#05b54d] shadow-sm' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        Chat
+                      </button>
                     </div>
 
                     <div className="relative flex items-center group">
