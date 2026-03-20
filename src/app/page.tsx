@@ -1041,17 +1041,21 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                       <div className="flex items-center justify-between">
                          <label className="text-xs font-medium text-slate-500">Webinar Link</label>
                          {contact.webinar.link && (
-                           <button
-                             onClick={() => copyToClipboard(contact.webinar.link, 'webinarLink')}
-                             className="text-xs flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors"
-                             title="Copy to clipboard"
-                           >
-                             {copiedField === 'webinarLink' ? (
-                               <><Check className="w-3 h-3 mr-1 text-emerald-500" /> Copied!</>
-                             ) : (
-                               <><Copy className="w-3 h-3 mr-1" /> Copy Link</>
-                             )}
-                           </button>
+                           <div className="flex items-center gap-2">
+                             <button
+                               onClick={() => copyToClipboard(contact.webinar.link, 'webinarLink')}
+                               className="text-xs flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                             >
+                               {copiedField === 'webinarLink' ? (
+                                 <><Check className="w-3 h-3 mr-1 text-emerald-500" /> Copied!</>
+                               ) : (
+                                 <><Copy className="w-3 h-3 mr-1" /> Copy</>
+                               )}
+                             </button>
+                             <a href={contact.webinar.link} target="_blank" rel="noopener noreferrer" className="text-xs flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors">
+                               <LinkIcon className="w-3 h-3 mr-1" /> Open
+                             </a>
+                           </div>
                          )}
                       </div>
                       <div className="relative group">
