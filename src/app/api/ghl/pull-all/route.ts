@@ -5,23 +5,60 @@ const GHL_BASE = 'https://services.leadconnectorhq.com';
 const GHL_KEY = process.env.GHL_API_KEY || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 
-function ghlHeaders() {
+function ghlHeaders(token: string) {
   return {
-    'Authorization': `Bearer ${GHL_KEY}`,
+    'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
     'Version': '2021-07-28',
   };
 }
 
 /**
+ * Agency PIT → exchange for a location-scoped access token.
+ * Required when using a Private Integration Token (pit-xxx) at agency level.
+ */
+async function getLocationToken(): Promise<string> {
+  // First get the companyId from the location info
+  const locRes = await fetch(`${GHL_BASE}/locations/${GHL_LOCATION_ID}`, {
+    headers: ghlHeaders(GHL_KEY),
+  });
+
+  let companyId: string | undefined;
+  if (locRes.ok) {
+    const locData = await locRes.json();
+    companyId = locData.location?.companyId;
+  }
+
+  if (!companyId) {
+    // Fall back: try using the key directly (might be a location-level key)
+    return GHL_KEY;
+  }
+
+  // Exchange agency token for location token
+  const tokenRes = await fetch(`${GHL_BASE}/oauth/locationToken`, {
+    method: 'POST',
+    headers: ghlHeaders(GHL_KEY),
+    body: JSON.stringify({ companyId, locationId: GHL_LOCATION_ID }),
+  });
+
+  if (!tokenRes.ok) {
+    // Fall back to original key
+    return GHL_KEY;
+  }
+
+  const tokenData = await tokenRes.json();
+  return tokenData.access_token || GHL_KEY;
+}
+
+/**
  * Fetch one page of contacts from GHL.
  * Uses cursor-based pagination (startAfterId).
  */
-async function fetchGHLPage(startAfterId?: string): Promise<{ contacts: any[]; nextCursor: string | null }> {
+async function fetchGHLPage(token: string, startAfterId?: string): Promise<{ contacts: any[]; nextCursor: string | null }> {
   const params = new URLSearchParams({ locationId: GHL_LOCATION_ID, limit: '100' });
   if (startAfterId) params.set('startAfterId', startAfterId);
 
-  const res = await fetch(`${GHL_BASE}/contacts/?${params}`, { headers: ghlHeaders() });
+  const res = await fetch(`${GHL_BASE}/contacts/?${params}`, { headers: ghlHeaders(token) });
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`GHL API error ${res.status}: ${err}`);
@@ -127,8 +164,10 @@ export async function POST() {
   let pages = 0;
 
   try {
+    const token = await getLocationToken();
+
     do {
-      const { contacts, nextCursor } = await fetchGHLPage(cursor);
+      const { contacts, nextCursor } = await fetchGHLPage(token, cursor);
       pages++;
 
       for (const c of contacts) {
