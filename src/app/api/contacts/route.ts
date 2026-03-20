@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { pushContactToGHL } from '@/lib/ghl-sync';
+
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -158,12 +158,6 @@ export async function POST(req: Request) {
         // Trigger automations
         const { processAutomations } = await import('@/lib/automation-engine');
         processAutomations('TAG_ADDED', tag, contact.id, contact.lineId);
-      }
-
-      // Push changes to GHL (fire-and-forget)
-      const ghlId = existing?.ghl_contact_id || contact.ghl_contact_id;
-      if (ghlId) {
-        pushContactToGHL({ ...contact, ghl_contact_id: ghlId }).catch(console.error);
       }
 
       // Save latest history item if provided
