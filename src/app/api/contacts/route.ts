@@ -59,8 +59,8 @@ export async function GET(req: Request) {
         uid: c.uid || '',
         attended: c.attended || false,
         purchased: c.purchased || false,
-        follow_up_at: c.follow_up_at || null,
         follow_up_note: c.follow_up_note || '',
+        ghl_tags: c.ghl_tags || [],
         history: contactHistory,
       };
     });
@@ -95,6 +95,7 @@ export async function POST(req: Request) {
       attended: contact.attended,
       purchased: contact.purchased,
       follow_up_note: contact.follow_up_note || '',
+      ghl_tags: contact.ghl_tags || [],
       updated_at: new Date().toISOString(),
     };
 
