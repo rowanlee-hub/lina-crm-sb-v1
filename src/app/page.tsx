@@ -3,12 +3,12 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  User, Mail, Phone, MessageCircle, Tag as TagIcon, Clock,
+  User, Users, Mail, Phone, MessageCircle, Tag as TagIcon, Clock,
   Calendar, Link as LinkIcon, CheckCircle2,
   Save, RefreshCw, Plus, Search, ChevronRight, ArrowLeft,
   Copy, Check, X, Filter, Loader2, AlertCircle, History,
   Send, Lock, Bell, Layout, List, Trash2, Megaphone, Pencil,
-  Table2, Upload, GitMerge, UserPlus
+  Table2, Upload, GitMerge, UserPlus, Zap, Inbox
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -386,33 +386,41 @@ function CRMDashboard() {
   return (
     <div className="h-screen w-full bg-slate-50 flex overflow-hidden font-sans text-slate-800">
       
-      {/* PANE 0: Left Navigation Sidebar (Narrow) */}
-      <aside className="w-[72px] bg-[#1e2330] flex flex-col items-center py-6 space-y-8 shrink-0 border-r border-slate-700/30 z-40">
-        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg transform transition-transform hover:scale-105 active:scale-95 cursor-pointer">
-           <span className="text-white font-bold text-xl drop-shadow-sm">Z</span>
+      {/* PANE 0: Left Navigation Sidebar */}
+      <aside className="w-[80px] bg-[#1e2330] flex flex-col items-center py-5 shrink-0 border-r border-slate-700/30 z-40">
+        {/* Logo */}
+        <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 cursor-pointer transition-transform mb-6">
+          <span className="text-white font-black text-lg tracking-tight">Lina</span>
         </div>
-        
-        <nav className="flex-1 flex flex-col space-y-4 w-full px-2">
-           <button
-             onClick={() => { setActiveTab("contacts"); setView("list"); router.push('/?tab=contacts'); }}
-             className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all group relative ${activeTab === 'contacts' ? 'bg-blue-600 text-white shadow-md shadow-blue-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
-             title="Contacts List"
-           >
-             <User className="w-6 h-6" />
-             <div className="absolute left-[100%] ml-4 px-2 py-1 bg-slate-900 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">CONTACTS</div>
-           </button>
-           <button 
-             onClick={() => { setActiveTab("marketing"); setView("list"); router.push('/?tab=marketing'); }}
-             className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all group relative ${activeTab === 'marketing' ? 'bg-blue-600 text-white shadow-md shadow-blue-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
-             title="Marketing & Automations"
-           >
-             <RefreshCw className="w-6 h-6" />
-             <div className="absolute left-[100%] ml-4 px-2 py-1 bg-slate-900 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">AUTOMATION</div>
-           </button>
+
+        {/* Nav items */}
+        <nav className="flex-1 flex flex-col items-center gap-1 w-full px-2">
+          {[
+            { tab: 'contacts' as const,  Icon: Users,          label: 'Contacts',   path: '/?tab=contacts'  },
+            { tab: 'inbox' as const,     Icon: Inbox,          label: 'Inbox',      path: '/?tab=inbox'     },
+            { tab: 'marketing' as const, Icon: Zap,            label: 'Automation', path: '/?tab=marketing' },
+          ].map(({ tab, Icon, label, path }) => (
+            <button
+              key={tab}
+              onClick={() => { setActiveTab(tab); setView('list'); router.push(path); }}
+              className={`w-full flex flex-col items-center gap-1 py-2.5 rounded-xl transition-all ${
+                activeTab === tab
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-900/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-[9px] font-bold uppercase tracking-wider leading-none">{label}</span>
+            </button>
+          ))}
         </nav>
 
-        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center border border-slate-600 text-slate-300 hover:text-white transition-colors cursor-pointer">
-          <User className="w-5 h-5" />
+        {/* Profile */}
+        <div className="flex flex-col items-center gap-1 mt-2">
+          <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center border border-slate-600 text-slate-300 hover:text-white hover:border-slate-400 transition-colors cursor-pointer">
+            <User className="w-4 h-4" />
+          </div>
+          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">You</span>
         </div>
       </aside>
 
