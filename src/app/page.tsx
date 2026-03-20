@@ -988,6 +988,13 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
   const [wbMessages, setWbMessages] = useState<any[]>([]);
   const [webinarDateOptions, setWebinarDateOptions] = useState<{ label: string; value: string }[]>([]);
 
+  // Automation management states
+  const [wfEnrollments, setWfEnrollments] = useState<any[]>([]);
+  const [allWorkflows, setAllWorkflows] = useState<any[]>([]);
+  const [wfEnrolling, setWfEnrolling] = useState(false);
+  const [wfRemoving, setWfRemoving] = useState<string | null>(null);
+  const [wbRemoving, setWbRemoving] = useState(false);
+
   // Load tag definitions for autocomplete
   useEffect(() => {
     fetch('/api/tags').then(r => r.json()).then(data => {
@@ -1021,7 +1028,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
     setContact(safe);
     setLineMessageText("");
     setMessageFeedback({ type: "", text: "" });
-    // Fetch webinar enrollment for this contact
+    // Fetch enrollments for this contact
     if (contactData.id && !isNew) {
       fetch(`/api/webinar-sequence/enrollments?contact_id=${contactData.id}`)
         .then(r => r.json())
@@ -1032,6 +1039,14 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
       fetch(`/api/webinar-sequence/messages?contact_id=${contactData.id}`)
         .then(r => r.json())
         .then(data => setWbMessages(Array.isArray(data) ? data : []))
+        .catch(() => {});
+      fetch(`/api/workflows/enrollments?contact_id=${contactData.id}`)
+        .then(r => r.json())
+        .then(data => setWfEnrollments(Array.isArray(data) ? data : []))
+        .catch(() => {});
+      fetch('/api/workflows')
+        .then(r => r.json())
+        .then(data => setAllWorkflows(Array.isArray(data) ? data : []))
         .catch(() => {});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1605,6 +1620,159 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                             </div>
                           );
                         })
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* --- Automations Management --- */}
+                {!isNew && (
+                  <div className="border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Zap className="w-4 h-4 text-purple-500" />
+                        <h3 className="text-sm font-semibold text-slate-700 tracking-wide">Automations</h3>
+                      </div>
+                    </div>
+                    <div className="p-4 space-y-4">
+                      {/* Workflow Enrollments */}
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Workflows</p>
+                        {wfEnrollments.filter((e: any) => e.status === 'active').length === 0 ? (
+                          <p className="text-xs text-slate-400 italic mb-2">No active workflows</p>
+                        ) : (
+                          <div className="space-y-1.5 mb-2">
+                            {wfEnrollments.filter((e: any) => e.status === 'active').map((e: any) => (
+                              <div key={e.id} className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Zap className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                                  <span className="text-xs font-semibold text-slate-700 truncate">{e.workflows?.name || 'Unknown'}</span>
+                                  <span className="text-[9px] font-bold text-purple-600 bg-purple-100 border border-purple-200 px-1.5 py-0.5 rounded-full shrink-0">Active</span>
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Remove "${e.workflows?.name}" from this contact?`)) return;
+                                    setWfRemoving(e.id);
+                                    try {
+                                      const res = await fetch(`/api/workflows/enrollments?id=${e.id}`, { method: 'DELETE' });
+                                      const data = await res.json();
+                                      if (data.success) {
+                                        setWfEnrollments(prev => prev.map((en: any) => en.id === e.id ? { ...en, status: 'completed' } : en));
+                                      } else { alert(data.error || 'Failed to remove'); }
+                                    } catch { alert('Failed to remove'); }
+                                    finally { setWfRemoving(null); }
+                                  }}
+                                  disabled={wfRemoving === e.id}
+                                  className="text-[10px] font-bold text-red-500 hover:text-red-700 disabled:opacity-50 shrink-0 ml-2"
+                                >
+                                  {wfRemoving === e.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Add workflow dropdown */}
+                        {(() => {
+                          const activeIds = wfEnrollments.filter((e: any) => e.status === 'active').map((e: any) => e.workflow_id);
+                          const available = allWorkflows.filter((w: any) => w.is_active && !activeIds.includes(w.id));
+                          if (available.length === 0) return null;
+                          return (
+                            <div className="flex items-center gap-2">
+                              <select
+                                id="wf-add-select"
+                                className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-1 focus:ring-purple-300 outline-none"
+                                defaultValue=""
+                              >
+                                <option value="" disabled>Add workflow…</option>
+                                {available.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                              </select>
+                              <button
+                                disabled={wfEnrolling}
+                                onClick={async () => {
+                                  const sel = (document.getElementById('wf-add-select') as HTMLSelectElement);
+                                  const wfId = sel?.value;
+                                  if (!wfId) return;
+                                  setWfEnrolling(true);
+                                  try {
+                                    const res = await fetch('/api/workflows/enrollments', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ contact_id: contactData.id, workflow_id: wfId }),
+                                    });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      // Refetch enrollments
+                                      const r2 = await fetch(`/api/workflows/enrollments?contact_id=${contactData.id}`);
+                                      const d2 = await r2.json();
+                                      setWfEnrollments(Array.isArray(d2) ? d2 : []);
+                                      sel.value = '';
+                                    } else { alert(data.error || 'Failed to enroll'); }
+                                  } catch { alert('Failed to enroll'); }
+                                  finally { setWfEnrolling(false); }
+                                }}
+                                className="px-2.5 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {wfEnrolling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                                Add
+                              </button>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Webinar Sequence Enrollment */}
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Webinar Sequence</p>
+                        {wbEnrollment && wbEnrollment.status === 'active' ? (
+                          <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Calendar className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                              <span className="text-xs font-semibold text-slate-700">
+                                Webinar {new Date(wbEnrollment.webinar_date).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </span>
+                              <span className="text-[9px] font-bold text-blue-600 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded-full shrink-0">Active</span>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Remove this contact from the webinar sequence?')) return;
+                                setWbRemoving(true);
+                                try {
+                                  const res = await fetch(`/api/webinar-sequence/enrollments?id=${wbEnrollment.id}`, { method: 'DELETE' });
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    setWbEnrollment({ ...wbEnrollment, status: 'cancelled' });
+                                    setWbMessages(prev => prev.map((m: any) => m.status === 'pending' ? { ...m, status: 'skipped' } : m));
+                                  } else { alert(data.error || 'Failed to remove'); }
+                                } catch { alert('Failed to remove'); }
+                                finally { setWbRemoving(false); }
+                              }}
+                              disabled={wbRemoving}
+                              className="text-[10px] font-bold text-red-500 hover:text-red-700 disabled:opacity-50 shrink-0 ml-2"
+                            >
+                              {wbRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic">Not enrolled in webinar sequence</p>
+                        )}
+                      </div>
+
+                      {/* Completed/past enrollments summary */}
+                      {wfEnrollments.filter((e: any) => e.status !== 'active').length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Past Workflows</p>
+                          <div className="space-y-1">
+                            {wfEnrollments.filter((e: any) => e.status !== 'active').map((e: any) => (
+                              <div key={e.id} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg">
+                                <Zap className="w-3 h-3 text-slate-300 shrink-0" />
+                                <span className="text-xs text-slate-500 truncate">{e.workflows?.name || 'Unknown'}</span>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${e.status === 'completed' ? 'text-green-600 bg-green-50 border border-green-100' : 'text-slate-400 bg-slate-100 border border-slate-200'}`}>
+                                  {e.status === 'completed' ? 'Completed' : e.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
