@@ -65,7 +65,7 @@ function CRMDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<"contacts" | "inbox" | "marketing">("contacts");
+  const [activeTab, setActiveTab] = useState<"contacts" | "inbox" | "marketing" | "link">("contacts");
   const [view, setView] = useState<"list" | "detail" | "add">("list");
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
@@ -265,7 +265,7 @@ function CRMDashboard() {
 
   // Deep-link: restore full app state from URL on load/navigation
   useEffect(() => {
-    const tabParam = searchParams.get('tab') as "contacts" | "inbox" | "marketing" | null;
+    const tabParam = searchParams.get('tab') as "contacts" | "inbox" | "marketing" | "link" | null;
     const idParam = searchParams.get('id');
 
     if (tabParam) setActiveTab(tabParam);
@@ -415,6 +415,7 @@ function CRMDashboard() {
             { tab: 'contacts' as const,  Icon: Users,          label: 'Contacts',   path: '/?tab=contacts'  },
             { tab: 'inbox' as const,     Icon: Inbox,          label: 'Inbox',      path: '/?tab=inbox'     },
             { tab: 'marketing' as const, Icon: Zap,            label: 'Automation', path: '/?tab=marketing' },
+            { tab: 'link' as const,      Icon: GitMerge,       label: 'Link IDs',   path: '/?tab=link'      },
           ].map(({ tab, Icon, label, path }) => (
             <button
               key={tab}
@@ -441,7 +442,7 @@ function CRMDashboard() {
       </aside>
 
       {/* PANE 1: Master List Pane (Middle-Left) */}
-      {activeTab !== 'marketing' && (
+      {activeTab !== 'marketing' && activeTab !== 'link' && (
         <main className={`w-full max-w-[360px] bg-white border-r border-slate-200 flex flex-col shrink-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] relative overflow-hidden ${sheetMode && activeTab === 'contacts' ? 'hidden' : ''}`}>
           <div className="border-b border-slate-100 flex flex-col bg-white/50 backdrop-blur-sm sticky top-0 z-20">
             {/* Title + count */}
@@ -881,6 +882,8 @@ function CRMDashboard() {
               </table>
             </div>
           </div>
+        ) : activeTab === 'link' ? (
+          <LineMatchView />
         ) : activeTab === 'marketing' ? (
           <AutomationsView initialSub={searchParams.get('sub') ?? undefined} />
         ) : !selectedContactId && view === 'list' ? (
@@ -3490,6 +3493,223 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
         )}
 
 
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// LINE MATCH VIEW — import CSV to link LINE IDs to contacts by email
+// ============================================================================
+function LineMatchView() {
+  type RowResult = { email: string; line_id: string; status: 'linked' | 'skipped' | 'not_found' | 'already_had' };
+  const [rows, setRows] = useState<Array<{ email: string; line_id: string }>>([]);
+  const [preview, setPreview] = useState<Array<{ email: string; line_id: string }>>([]);
+  const [results, setResults] = useState<RowResult[] | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [parseError, setParseError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const statusLabel: Record<RowResult['status'], string> = {
+    linked: 'Linked',
+    already_had: 'Already linked',
+    not_found: 'Not found',
+    skipped: 'Skipped',
+  };
+  const statusColor: Record<RowResult['status'], string> = {
+    linked: 'text-green-600 bg-green-50',
+    already_had: 'text-amber-600 bg-amber-50',
+    not_found: 'text-red-600 bg-red-50',
+    skipped: 'text-slate-500 bg-slate-100',
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setParseError('');
+    setResults(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) { setParseError('File appears empty or has no data rows.'); return; }
+
+      // Detect header
+      const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+      const emailIdx = header.findIndex(h => h === 'email');
+      const lineIdIdx = header.findIndex(h => ['line_id', 'lineid', 'line id', 'userid', 'user_id'].includes(h));
+
+      if (emailIdx === -1 || lineIdIdx === -1) {
+        setParseError(`Could not find "email" and "line_id" columns. Found columns: ${header.join(', ')}`);
+        return;
+      }
+
+      const parsed: Array<{ email: string; line_id: string }> = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        const email = cols[emailIdx]?.toLowerCase() || '';
+        const lineId = cols[lineIdIdx] || '';
+        if (email || lineId) parsed.push({ email, line_id: lineId });
+      }
+      if (parsed.length === 0) { setParseError('No valid rows found.'); return; }
+      setRows(parsed);
+      setPreview(parsed.slice(0, 5));
+    };
+    reader.readAsText(file);
+  };
+
+  const handleRun = async () => {
+    if (rows.length === 0) return;
+    setIsRunning(true);
+    setResults(null);
+    try {
+      const res = await fetch('/api/contacts/link-line-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed');
+      setResults(data.results);
+    } catch (err: unknown) {
+      setParseError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const reset = () => {
+    setRows([]);
+    setPreview([]);
+    setResults(null);
+    setParseError('');
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const linked = results?.filter(r => r.status === 'linked').length ?? 0;
+  const alreadyHad = results?.filter(r => r.status === 'already_had').length ?? 0;
+  const notFound = results?.filter(r => r.status === 'not_found').length ?? 0;
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Header */}
+        <div>
+          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Link LINE IDs</h2>
+          <p className="text-slate-500 mt-1 text-sm">Upload a CSV with <code className="bg-slate-100 px-1 rounded text-xs">email</code> and <code className="bg-slate-100 px-1 rounded text-xs">line_id</code> columns. Only contacts without a LINE ID will be updated — existing links are never replaced.</p>
+        </div>
+
+        {/* Upload card */}
+        {!results && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
+            <div
+              className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center gap-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all"
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload className="w-8 h-8 text-slate-300" />
+              <p className="text-sm font-semibold text-slate-500">Click to upload CSV</p>
+              <p className="text-xs text-slate-400">Required columns: <strong>email</strong>, <strong>line_id</strong></p>
+              <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
+            </div>
+
+            {parseError && (
+              <div className="flex items-start gap-2 text-red-600 text-sm bg-red-50 rounded-xl p-3">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{parseError}</span>
+              </div>
+            )}
+
+            {preview.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{rows.length} rows loaded — preview</p>
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="text-left px-3 py-2 text-xs text-slate-400 font-semibold border-b border-slate-100">Email</th>
+                      <th className="text-left px-3 py-2 text-xs text-slate-400 font-semibold border-b border-slate-100">LINE User ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map((r, i) => (
+                      <tr key={i} className="border-b border-slate-50">
+                        <td className="px-3 py-2 text-slate-700 truncate max-w-[180px]">{r.email}</td>
+                        <td className="px-3 py-2 text-slate-500 font-mono text-xs truncate">{r.line_id}</td>
+                      </tr>
+                    ))}
+                    {rows.length > 5 && (
+                      <tr><td colSpan={2} className="px-3 py-2 text-xs text-slate-400 italic">…and {rows.length - 5} more rows</td></tr>
+                    )}
+                  </tbody>
+                </table>
+
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={handleRun}
+                    disabled={isRunning}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50 transition-all"
+                  >
+                    {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitMerge className="w-4 h-4" />}
+                    {isRunning ? 'Linking…' : `Link ${rows.length} contacts`}
+                  </button>
+                  <button onClick={reset} className="px-4 py-2.5 border border-slate-200 text-slate-500 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-all">
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Results */}
+        {results && (
+          <div className="space-y-4">
+            {/* Summary */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Linked', value: linked, color: 'text-green-600', bg: 'bg-green-50 border-green-100' },
+                { label: 'Already linked', value: alreadyHad, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-100' },
+                { label: 'Not found', value: notFound, color: 'text-red-500', bg: 'bg-red-50 border-red-100' },
+              ].map(s => (
+                <div key={s.label} className={`rounded-xl border p-4 ${s.bg} flex flex-col items-center`}>
+                  <span className={`text-3xl font-extrabold ${s.color}`}>{s.value}</span>
+                  <span className="text-xs text-slate-500 font-semibold mt-1">{s.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Detail table */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <span className="text-sm font-bold text-slate-700">All results</span>
+                <button onClick={reset} className="text-xs text-blue-600 hover:underline font-semibold">Upload another</button>
+              </div>
+              <div className="overflow-y-auto max-h-[400px]">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-white border-b border-slate-100">
+                    <tr>
+                      <th className="text-left px-4 py-2 text-xs text-slate-400 font-semibold">Email</th>
+                      <th className="text-left px-4 py-2 text-xs text-slate-400 font-semibold">LINE User ID</th>
+                      <th className="text-left px-4 py-2 text-xs text-slate-400 font-semibold">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.map((r, i) => (
+                      <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50">
+                        <td className="px-4 py-2 text-slate-700 truncate max-w-[160px]">{r.email}</td>
+                        <td className="px-4 py-2 text-slate-500 font-mono text-xs truncate">{r.line_id}</td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${statusColor[r.status]}`}>
+                            {statusLabel[r.status]}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
