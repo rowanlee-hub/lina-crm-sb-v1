@@ -30,7 +30,7 @@ async function processRow(row: ImportRow): Promise<RowResult> {
     let existing: any = null;
     const { data: byLineId } = await supabase
       .from('contacts')
-      .select('id, line_id, name, email, webinar_date, webinar_link')
+      .select('id, line_id, name, email, webinar_date, webinar_link, tags')
       .eq('line_id', lineId)
       .limit(1);
     existing = byLineId?.[0] ?? null;
@@ -38,7 +38,7 @@ async function processRow(row: ImportRow): Promise<RowResult> {
     if (!existing && email) {
       const { data: byEmail } = await supabase
         .from('contacts')
-        .select('id, line_id, name, email, webinar_date, webinar_link')
+        .select('id, line_id, name, email, webinar_date, webinar_link, tags')
         .eq('email', email)
         .limit(1);
       existing = byEmail?.[0] ?? null;
@@ -46,13 +46,25 @@ async function processRow(row: ImportRow): Promise<RowResult> {
 
     const now = new Date().toISOString();
 
+    // Generate webinar tag from date: 2026-02-18 → webinar-0218
+    const webinarTag = safeWebinarDate
+      ? `webinar-${safeWebinarDate.substring(5, 7)}${safeWebinarDate.substring(8, 10)}`
+      : '';
+
     if (existing) {
-      const patch: Record<string, string> = { updated_at: now };
+      const patch: Record<string, any> = { updated_at: now };
       if (!existing.line_id && lineId) patch.line_id = lineId;
       if (!existing.name && displayName) patch.name = displayName;
       if (!existing.email && email) patch.email = email;
-      if (!existing.webinar_date && safeWebinarDate) patch.webinar_date = safeWebinarDate;
-      if (!existing.webinar_link && webinarLink) patch.webinar_link = webinarLink;
+      // Always update webinar date + link (they change between imports)
+      if (safeWebinarDate && existing.webinar_date !== safeWebinarDate) patch.webinar_date = safeWebinarDate;
+      if (webinarLink && existing.webinar_link !== webinarLink) patch.webinar_link = webinarLink;
+
+      // Add webinar tag if not already present
+      const existingTags: string[] = existing.tags || [];
+      if (webinarTag && !existingTags.includes(webinarTag)) {
+        patch.tags = [...existingTags, webinarTag];
+      }
 
       if (Object.keys(patch).length <= 1) {
         return { ...base, status: 'already_had' };
@@ -60,14 +72,19 @@ async function processRow(row: ImportRow): Promise<RowResult> {
 
       await supabase.from('contacts').update(patch).eq('id', existing.id);
 
+      // Auto-register tag definition
+      if (webinarTag && !existingTags.includes(webinarTag)) {
+        supabase.from('tag_definitions').upsert({ name: webinarTag }, { onConflict: 'name' }).then(() => {});
+      }
+
       const actions: string[] = [];
       if (patch.line_id) actions.push(`LINE ID`);
       if (patch.name) actions.push(`name`);
       if (patch.email) actions.push(`email`);
-      if (patch.webinar_date) actions.push(`webinar date`);
+      if (patch.webinar_date) actions.push(`webinar: ${safeWebinarDate}`);
       if (patch.webinar_link) actions.push(`webinar link`);
+      if (patch.tags) actions.push(`tag: ${webinarTag}`);
 
-      // Fire-and-forget history insert
       supabase.from('contact_history').insert({
         contact_id: existing.id,
         action: `CSV import: updated ${actions.join(', ')}`,
@@ -77,6 +94,7 @@ async function processRow(row: ImportRow): Promise<RowResult> {
     }
 
     // Create new contact
+    const newTags = webinarTag ? [webinarTag] : [];
     const { data: newContact, error: insertError } = await supabase
       .from('contacts')
       .insert({
@@ -84,7 +102,7 @@ async function processRow(row: ImportRow): Promise<RowResult> {
         name: displayName || '',
         email: email || '',
         phone: '',
-        tags: [],
+        tags: newTags,
         status: 'Lead',
         uid: '',
         webinar_date: safeWebinarDate || null,
@@ -95,10 +113,14 @@ async function processRow(row: ImportRow): Promise<RowResult> {
 
     if (insertError) return { ...base, status: 'skipped' };
 
-    // Fire-and-forget history
+    // Auto-register tag definition
+    if (webinarTag) {
+      supabase.from('tag_definitions').upsert({ name: webinarTag }, { onConflict: 'name' }).then(() => {});
+    }
+
     supabase.from('contact_history').insert({
       contact_id: newContact.id,
-      action: 'Contact created via LINE CSV import',
+      action: `Contact created via LINE CSV import${webinarTag ? ` [${webinarTag}]` : ''}`,
     }).then(() => {});
 
     return { ...base, status: 'created' };
