@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { 
+import {
   User, Mail, Phone, MessageCircle, Tag as TagIcon, Clock,
-  Calendar, Link as LinkIcon, CheckCircle2, 
+  Calendar, Link as LinkIcon, CheckCircle2,
   Save, RefreshCw, Plus, Search, ChevronRight, ArrowLeft,
   Copy, Check, X, Filter, Loader2, AlertCircle, History,
-  Send, Lock, Bell, Layout, List, Trash2, Megaphone, Pencil
+  Send, Lock, Bell, Layout, List, Trash2, Megaphone, Pencil, Table2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -81,6 +81,10 @@ function CRMDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTagFilter, setSelectedTagFilter] = useState("All");
   const [lineOnlyFilter, setLineOnlyFilter] = useState(false);
+  const [sheetMode, setSheetMode] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ contactId: string; field: string } | null>(null);
+  const [cellDraft, setCellDraft] = useState('');
+  const [savingCell, setSavingCell] = useState<string | null>(null);
 
   // Fetch contacts on mount + real-time subscriptions
   useEffect(() => {
@@ -154,6 +158,34 @@ function CRMDashboard() {
       alert('Dedup request failed');
     }
     setIsDeduping(false);
+  };
+
+  const saveCell = async (contact: Contact, field: string, value: string) => {
+    const key = `${contact.id}:${field}`;
+    setSavingCell(key);
+    let updatedContact: Contact;
+    if (field === 'tags') {
+      const tags = value.split(',').map((t: string) => t.trim()).filter(Boolean);
+      updatedContact = { ...contact, tags };
+    } else if (field === 'notes') {
+      updatedContact = { ...contact, notes: value };
+    } else {
+      updatedContact = { ...contact, [field]: value };
+    }
+    try {
+      const resp = await fetch(CONTACTS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedContact),
+      });
+      const result = await resp.json();
+      if (result.success) {
+        setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
+      }
+    } finally {
+      setSavingCell(null);
+      setEditingCell(null);
+    }
   };
 
   const uniqueTags = ["All", ...getAllUniqueTags(contacts)];
@@ -329,7 +361,7 @@ function CRMDashboard() {
 
       {/* PANE 1: Master List Pane (Middle-Left) */}
       {activeTab !== 'marketing' && (
-        <main className="w-full max-w-[360px] bg-white border-r border-slate-200 flex flex-col shrink-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)]">
+        <main className={`w-full max-w-[360px] bg-white border-r border-slate-200 flex flex-col shrink-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] ${sheetMode && activeTab === 'contacts' ? 'hidden' : ''}`}>
           <div className="p-5 border-b border-slate-100 flex flex-col space-y-4 bg-white/50 backdrop-blur-sm sticky top-0 z-20">
             <div className="flex items-center justify-between">
               <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
@@ -338,6 +370,13 @@ function CRMDashboard() {
               <div className="flex items-center space-x-2">
                 {activeTab === 'contacts' && (
                   <>
+                    <button
+                      onClick={() => setSheetMode(m => !m)}
+                      className={`p-1.5 rounded-lg transition-all shadow-sm active:scale-95 ${sheetMode ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-600'}`}
+                      title={sheetMode ? 'Switch to List view' : 'Switch to Sheet view'}
+                    >
+                      <Table2 className="w-5 h-5" />
+                    </button>
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isImporting}
@@ -451,7 +490,149 @@ function CRMDashboard() {
 
       {/* PANE 2 & 3: Active Workspace (Flexible) */}
       <section className="flex-1 bg-white flex flex-col overflow-hidden relative">
-        {activeTab === 'marketing' ? (
+        {activeTab === 'contacts' && sheetMode ? (
+          /* ── SHEET VIEW ──────────────────────────────────────────── */
+          <div className="flex flex-col h-full">
+            {/* Sheet toolbar */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setSheetMode(false)} className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all" title="Back to list view">
+                  <List className="w-4 h-4" />
+                </button>
+                <span className="text-sm font-bold text-slate-700">Sheet View — {filteredContacts.length} contacts</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative group">
+                  <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search…" className="pl-8 pr-3 py-1.5 text-xs bg-slate-100 border border-transparent focus:bg-white focus:border-blue-200 rounded-lg outline-none" />
+                </div>
+                <select value={selectedTagFilter} onChange={e => setSelectedTagFilter(e.target.value)} className="text-xs px-2 py-1.5 bg-slate-100 border border-transparent rounded-lg outline-none focus:bg-white focus:border-blue-200">
+                  {uniqueTags.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Sheet table */}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-sm border-collapse min-w-[1100px]">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-8">#</th>
+                    {[
+                      { key: 'name',         label: 'Name',         w: '160px' },
+                      { key: 'email',        label: 'Email',        w: '200px' },
+                      { key: 'phone',        label: 'Phone',        w: '140px' },
+                      { key: 'tags',         label: 'Tags',         w: '220px' },
+                      { key: 'status',       label: 'Status',       w: '110px' },
+                      { key: 'notes',        label: 'Notes',        w: '220px' },
+                      { key: 'lineId',       label: 'LINE ID',      w: '150px' },
+                    ].map(col => (
+                      <th key={col.key} style={{ minWidth: col.w }} className="px-3 py-2 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider border-l border-slate-100">{col.label}</th>
+                    ))}
+                    <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider border-l border-slate-100 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredContacts.map((contact, idx) => {
+                    const STATUSES = ['Lead', 'Nurturing', 'Customer', 'Closed'];
+                    const renderCell = (field: string, displayValue: string) => {
+                      const cellKey = `${contact.id}:${field}`;
+                      const isEditing = editingCell?.contactId === contact.id && editingCell?.field === field;
+                      const isSaving = savingCell === cellKey;
+
+                      if (isSaving) {
+                        return <span className="text-slate-400 italic text-xs">Saving…</span>;
+                      }
+                      if (isEditing) {
+                        if (field === 'status') {
+                          return (
+                            <select
+                              autoFocus
+                              value={cellDraft}
+                              onChange={e => setCellDraft(e.target.value)}
+                              onBlur={() => saveCell(contact, field, cellDraft)}
+                              className="w-full text-xs border border-blue-400 rounded px-1.5 py-1 outline-none bg-white"
+                            >
+                              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          );
+                        }
+                        if (field === 'notes') {
+                          return (
+                            <textarea
+                              autoFocus
+                              value={cellDraft}
+                              onChange={e => setCellDraft(e.target.value)}
+                              onBlur={() => saveCell(contact, field, cellDraft)}
+                              rows={3}
+                              className="w-full text-xs border border-blue-400 rounded px-1.5 py-1 outline-none resize-none bg-white"
+                            />
+                          );
+                        }
+                        return (
+                          <input
+                            autoFocus
+                            type="text"
+                            value={cellDraft}
+                            onChange={e => setCellDraft(e.target.value)}
+                            onBlur={() => saveCell(contact, field, cellDraft)}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } if (e.key === 'Escape') { setEditingCell(null); } }}
+                            className="w-full text-xs border border-blue-400 rounded px-1.5 py-1 outline-none bg-white"
+                          />
+                        );
+                      }
+                      return (
+                        <span
+                          onClick={() => { setEditingCell({ contactId: contact.id, field }); setCellDraft(displayValue); }}
+                          className="block w-full min-h-[22px] cursor-text hover:bg-blue-50 rounded px-1 py-0.5 truncate text-xs text-slate-700"
+                          title={displayValue || 'Click to edit'}
+                        >
+                          {displayValue || <span className="text-slate-300 italic">—</span>}
+                        </span>
+                      );
+                    };
+
+                    return (
+                      <tr key={contact.id} className={`border-b border-slate-100 hover:bg-slate-50/60 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                        <td className="px-3 py-2 text-[10px] text-slate-400 font-mono">{idx + 1}</td>
+                        <td className="px-2 py-1.5 border-l border-slate-100 font-medium">{renderCell('name', contact.name)}</td>
+                        <td className="px-2 py-1.5 border-l border-slate-100">{renderCell('email', contact.email)}</td>
+                        <td className="px-2 py-1.5 border-l border-slate-100">{renderCell('phone', contact.phone)}</td>
+                        <td className="px-2 py-1.5 border-l border-slate-100">
+                          {renderCell('tags', (contact.tags || []).join(', '))}
+                        </td>
+                        <td className="px-2 py-1.5 border-l border-slate-100">
+                          {editingCell?.contactId === contact.id && editingCell?.field === 'status' ? renderCell('status', contact.status) : (
+                            <span
+                              onClick={() => { setEditingCell({ contactId: contact.id, field: 'status' }); setCellDraft(contact.status || 'Lead'); }}
+                              className={`inline-block cursor-pointer px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                contact.status === 'Customer' ? 'bg-emerald-100 text-emerald-700' :
+                                contact.status === 'Closed' ? 'bg-slate-200 text-slate-500' :
+                                contact.status === 'Nurturing' ? 'bg-blue-100 text-blue-700' :
+                                'bg-amber-100 text-amber-700'
+                              }`}
+                            >
+                              {contact.status || 'Lead'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5 border-l border-slate-100 max-w-[220px]">{renderCell('notes', contact.notes || '')}</td>
+                        <td className="px-2 py-1.5 border-l border-slate-100">
+                          <span className="text-xs text-slate-400 font-mono truncate block">{contact.lineId ? `${contact.lineId.substring(0, 12)}…` : <span className="text-slate-200 italic">—</span>}</span>
+                        </td>
+                        <td className="px-2 py-1.5 border-l border-slate-100">
+                          <button onClick={() => handleContactClick(contact.id)} className="text-[10px] text-blue-500 hover:text-blue-700 font-bold" title="Open detail">
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : activeTab === 'marketing' ? (
           <AutomationsView initialSub={searchParams.get('sub') ?? undefined} />
         ) : !selectedContactId && view === 'list' ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12 bg-white space-y-6">
