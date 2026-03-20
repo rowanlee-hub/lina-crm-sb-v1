@@ -71,6 +71,8 @@ function CRMDashboard() {
   const [activeWebinarDate, setActiveWebinarDate] = useState<string>('');
   const [isImporting, setIsImporting] = useState(false);
   const [isDeduping, setIsDeduping] = useState(false);
+  const [isGhlPulling, setIsGhlPulling] = useState(false);
+  const [ghlPullResult, setGhlPullResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // API States
@@ -164,6 +166,25 @@ function CRMDashboard() {
       alert('Dedup request failed');
     }
     setIsDeduping(false);
+  };
+
+  const handleGhlPull = async () => {
+    setIsGhlPulling(true);
+    setGhlPullResult(null);
+    try {
+      const res = await fetch('/api/ghl/pull-all', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setGhlPullResult(`✓ Synced ${data.total} contacts — ${data.created} new, ${data.updated} updated${data.errors > 0 ? `, ${data.errors} errors` : ''}`);
+        fetchContacts();
+      } else {
+        setGhlPullResult(`✗ ${data.error}`);
+      }
+    } catch {
+      setGhlPullResult('✗ Sync request failed');
+    }
+    setIsGhlPulling(false);
+    setTimeout(() => setGhlPullResult(null), 8000);
   };
 
   const saveCell = async (contact: Contact, field: string, value: string) => {
@@ -443,6 +464,14 @@ function CRMDashboard() {
                       <Table2 className="w-5 h-5" />
                     </button>
                     <button
+                      onClick={handleGhlPull}
+                      disabled={isGhlPulling}
+                      className="p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-green-100 hover:text-green-700 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                      title="Pull all contacts from GoHighLevel"
+                    >
+                      {isGhlPulling ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
+                    </button>
+                    <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isImporting}
                       className="p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all shadow-sm active:scale-95 disabled:opacity-50"
@@ -487,6 +516,11 @@ function CRMDashboard() {
                 placeholder={`Search ${activeTab}...`}
               />
             </div>
+            {ghlPullResult && (
+              <div className={`text-xs font-medium px-3 py-2 rounded-lg ${ghlPullResult.startsWith('✓') ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                {ghlPullResult}
+              </div>
+            )}
             {activeTab === 'contacts' && (
               <div className="flex gap-2">
                 <button
