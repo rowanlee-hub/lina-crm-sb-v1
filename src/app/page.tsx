@@ -417,11 +417,18 @@ function CRMDashboard() {
                             ? (contact.history?.[0]?.action?.replace("Chat: ", "You: ").replace("Received: ", "") || "No messages")
                             : (contact.email || contact.lineId || "No info")}
                         </p>
-                        {contact.webinar?.dateTime && activeWebinarDate && (
-                          contact.webinar.dateTime.substring(0, 10) === activeWebinarDate.substring(0, 10)
-                            ? <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">UPCOMING</span>
-                            : <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500">PAST</span>
-                        )}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {contact.lineId && (
+                            (contact.email || contact.ghl_contact_id)
+                              ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">LINKED</span>
+                              : <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600">LINE ONLY</span>
+                          )}
+                          {contact.webinar?.dateTime && activeWebinarDate && (
+                            contact.webinar.dateTime.substring(0, 10) === activeWebinarDate.substring(0, 10)
+                              ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">UPCOMING</span>
+                              : <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500">PAST</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
