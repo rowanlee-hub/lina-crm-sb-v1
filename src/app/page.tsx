@@ -1287,101 +1287,89 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                   </div>
                 </div>
 
-                {/* ── GHL INFO (read-only for existing, editable for new) ───── */}
-                <div className="space-y-3 bg-slate-50 p-5 rounded-xl border border-slate-100">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                      {isNew ? 'Contact Details' : 'GHL Info'}
-                    </h3>
-                    {!isNew && (
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
-                        <Lock className="w-3 h-3" /> Read-only · Edit in GHL
+                {/* ── Contact Details ───────────────────────────────────── */}
+                <div className="space-y-4 bg-slate-50 p-5 rounded-xl border border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">Contact Details</h3>
+                    {!isNew && contact.ghl_contact_id && (
+                      <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
+                        <RefreshCw className="w-3 h-3" /> GHL synced
                       </span>
                     )}
                   </div>
 
-                  {isNew ? (
-                    /* Editable inputs for new contacts */
-                    <div className="space-y-3">
-                      <div className="relative flex items-center group">
-                        <div className="relative flex-1">
-                          <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                          <input type="text" value={contact.name} onChange={(e) => setContact({...contact, name: e.target.value})}
-                            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300" placeholder="Full Name" />
-                        </div>
-                        {copyIcon(contact.name, 'name')}
+                  <div className="space-y-3">
+                    <div className="relative flex items-center group">
+                      <div className="relative flex-1">
+                        <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={contact.name}
+                          onChange={(e) => setContact({...contact, name: e.target.value})}
+                          className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300"
+                          placeholder="Full Name"
+                        />
                       </div>
-                      <div className="relative flex items-center group">
-                        <div className="relative flex-1">
-                          <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                          <input type="email" value={contact.email} onChange={(e) => setContact({...contact, email: e.target.value})}
-                            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300" placeholder="Email Address" />
-                        </div>
-                        {copyIcon(contact.email, 'email')}
-                      </div>
-                      <div className="relative flex items-center group">
-                        <div className="relative flex-1">
-                          <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                          <input type="tel" value={contact.phone} onChange={(e) => setContact({...contact, phone: e.target.value})}
-                            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300" placeholder="Phone Number" />
-                        </div>
-                        {copyIcon(contact.phone, 'phone')}
-                      </div>
-                      <div className="relative flex items-center group">
-                        <div className="relative flex-1">
-                          <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                          <input type="text" value={contact.uid || ''} onChange={(e) => setContact({...contact, uid: e.target.value})}
-                            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300" placeholder="UID (e.g. student ID)" />
-                        </div>
-                        {copyIcon(contact.uid || '', 'uid')}
-                      </div>
+                      {copyIcon(contact.name, 'name')}
                     </div>
-                  ) : (
-                    /* Read-only display for existing contacts */
-                    <div className="space-y-1.5">
-                      {[
-                        { icon: <User className="w-4 h-4 text-slate-400 shrink-0" />, value: contact.name, field: 'name', placeholder: 'No name' },
-                        { icon: <Mail className="w-4 h-4 text-slate-400 shrink-0" />, value: contact.email, field: 'email', placeholder: 'No email' },
-                        { icon: <Phone className="w-4 h-4 text-slate-400 shrink-0" />, value: contact.phone, field: 'phone', placeholder: 'No phone' },
-                        { icon: <Lock className="w-4 h-4 text-slate-400 shrink-0" />, value: contact.uid || '', field: 'uid', placeholder: 'No UID' },
-                      ].map(({ icon, value, field, placeholder }) => (
-                        <div key={field} className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-slate-100 group">
-                          {icon}
-                          <span className={`flex-1 text-sm truncate ${value ? 'text-slate-700' : 'text-slate-300 italic'}`}>{value || placeholder}</span>
-                          {value && (
-                            <button onClick={() => copyToClipboard(value, field)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-slate-100">
-                              {copiedField === field ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                      {contact.ghl_contact_id && (
-                        <p className="text-[10px] text-slate-400 flex items-center gap-1 pt-1">
-                          <RefreshCw className="w-3 h-3" /> GHL ID: <span className="font-mono">{contact.ghl_contact_id}</span>
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
 
-                {/* ── LINE Connection (always editable) ───────────────────── */}
-                <div className="relative pt-2 flex items-center group bg-emerald-50 px-4 pb-3 rounded-xl border border-emerald-100">
-                  <div className="relative flex-1">
-                    <label className="absolute -top-1 left-0 text-xs font-semibold text-emerald-600">LINE User ID</label>
-                    <MessageCircle className="absolute left-0 top-6 h-4 w-4 text-emerald-500" />
-                    <input
-                      type="text"
-                      value={contact.lineId}
-                      onChange={(e) => setContact({...contact, lineId: e.target.value})}
-                      className="w-full pl-6 pr-4 pt-5 pb-1.5 bg-transparent border-b border-emerald-200 text-emerald-800 font-medium focus:outline-none focus:border-emerald-500 transition-all text-sm"
-                      placeholder="U1a2b3c4d5..."
-                    />
+                    <div className="relative flex items-center group">
+                      <div className="relative flex-1">
+                        <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                        <input
+                          type="email"
+                          value={contact.email}
+                          onChange={(e) => setContact({...contact, email: e.target.value})}
+                          className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300"
+                          placeholder="Email Address"
+                        />
+                      </div>
+                      {copyIcon(contact.email, 'email')}
+                    </div>
+
+                    <div className="relative flex items-center group">
+                      <div className="relative flex-1">
+                        <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                        <input
+                          type="tel"
+                          value={contact.phone}
+                          onChange={(e) => setContact({...contact, phone: e.target.value})}
+                          className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300"
+                          placeholder="Phone Number"
+                        />
+                      </div>
+                      {copyIcon(contact.phone, 'phone')}
+                    </div>
+
+                    <div className="relative pt-2 flex items-center group">
+                      <div className="relative flex-1">
+                        <label className="absolute -top-1 left-3 bg-slate-50 px-1 text-xs font-semibold text-emerald-600 z-10">LINE User ID</label>
+                        <MessageCircle className="absolute left-3 top-5 h-5 w-5 text-emerald-500" />
+                        <input
+                          type="text"
+                          value={contact.lineId}
+                          onChange={(e) => setContact({...contact, lineId: e.target.value})}
+                          className="w-full pl-10 pr-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all hover:border-emerald-300"
+                          placeholder="@line_id"
+                        />
+                      </div>
+                      {copyIcon(contact.lineId, 'lineId')}
+                    </div>
+
+                    <div className="relative flex items-center group">
+                      <div className="relative flex-1">
+                        <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={contact.uid || ''}
+                          onChange={(e) => setContact({...contact, uid: e.target.value})}
+                          className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all hover:border-slate-300"
+                          placeholder="UID (e.g. student ID)"
+                        />
+                      </div>
+                      {copyIcon(contact.uid || '', 'uid')}
+                    </div>
                   </div>
-                  {contact.lineId && (
-                    <button onClick={() => copyToClipboard(contact.lineId, 'lineId')} className="ml-2 p-1.5 rounded-lg hover:bg-emerald-100 transition-colors">
-                      {copiedField === 'lineId' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-emerald-400" />}
-                    </button>
-                  )}
                 </div>
 
                 <div className="space-y-4">
