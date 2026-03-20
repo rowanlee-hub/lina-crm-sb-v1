@@ -2005,29 +2005,26 @@ function ConversationsView({ contacts, selectedId, onUpdateContact }: Conversati
             <div ref={messagesEndRef} />
          </div>
 
-         <div className="p-4 bg-[#e8eef2] border-t border-slate-300 flex items-end space-x-3 shrink-0">
-            <textarea
+         <div className="bg-[#e8eef2] border-t border-slate-300 shrink-0 p-3 space-y-2">
+           <textarea
              value={lineMessageText}
              onChange={(e) => setLineMessageText(e.target.value)}
-             onKeyDown={(e) => {
-               if (e.key === 'Enter' && !e.shiftKey) {
-                 e.preventDefault();
-                 handleSendLineMessage();
-               }
-             }}
-             placeholder="Type a message..."
-             className="flex-1 bg-white border border-slate-300 rounded-3xl px-5 py-3 text-[15px] shadow-inner focus:ring-2 focus:ring-emerald-500 outline-none resize-none max-h-32 min-h-[48px]"
+             placeholder="Type a message... (Enter for new line)"
+             className="w-full bg-white border border-slate-300 rounded-2xl px-4 py-3 text-[15px] shadow-inner focus:ring-2 focus:ring-emerald-500 outline-none resize-none min-h-[96px] max-h-56 overflow-y-auto"
              disabled={isSendingMessage}
-             rows={1}
-             style={{ height: lineMessageText ? 'auto' : '48px' }}
+             rows={4}
            />
-           <button
-             onClick={handleSendLineMessage}
-             disabled={!lineMessageText.trim() || isSendingMessage}
-             className="w-12 h-12 shrink-0 bg-[#06c755] hover:bg-[#05b54d] text-white rounded-full shadow-md transition-all flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed group"
-           >
-             {isSendingMessage ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 ml-1 pr-1 group-enabled:group-hover:translate-x-0.5 transition-transform" />}
-           </button>
+           <div className="flex items-center justify-between">
+             <span className="text-[11px] text-slate-400">Enter = new line</span>
+             <button
+               onClick={handleSendLineMessage}
+               disabled={!lineMessageText.trim() || isSendingMessage}
+               className="flex items-center gap-2 px-5 py-2 bg-[#06c755] hover:bg-[#05b54d] text-white text-sm font-bold rounded-full shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+               {isSendingMessage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+               {isSendingMessage ? 'Sending…' : 'Send'}
+             </button>
+           </div>
          </div>
       </div>
 
