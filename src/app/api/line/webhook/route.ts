@@ -177,15 +177,13 @@ export async function POST(req: Request) {
         if (!result) continue;
         const { contact, isNew } = result;
 
-        await supabase.from('contact_history').insert({ contact_id: contact.id, action: 'Event: Follow' });
-
-        // Only trigger USER_FOLLOW automation for brand new contacts.
-        // Block/unblock returners already exist in Supabase — skip to avoid re-enrolling.
         if (isNew) {
+          await supabase.from('contact_history').insert({ contact_id: contact.id, action: 'Event: New Follow' });
           console.log(`[Webhook] New follower ${userId} — triggering USER_FOLLOW automation`);
           const { processAutomations } = await import('@/lib/automation-engine');
           processAutomations('USER_FOLLOW', 'FOLLOW', contact.id, userId);
         } else {
+          await supabase.from('contact_history').insert({ contact_id: contact.id, action: 'Event: Re-follow (was blocked)' });
           console.log(`[Webhook] Returning follower ${userId} (block/unblock) — skipping automation`);
         }
       }
