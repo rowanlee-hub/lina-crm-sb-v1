@@ -13,9 +13,101 @@ type RowResult = ImportRow & {
   status: 'created' | 'linked' | 'updated' | 'skipped' | 'already_had';
 };
 
-// POST — upsert LINE contacts from CSV import
-// Match order: line_id → email → create new
-// Never overwrites existing data — only fills in blank fields
+async function processRow(row: ImportRow): Promise<RowResult> {
+  const lineId = (row.line_id || '').trim();
+  const email = (row.email || '').trim().toLowerCase();
+  const displayName = (row.display_name || '').trim();
+  const webinarDate = (row.webinar_date || '').trim();
+  const webinarLink = (row.webinar_link || '').trim();
+  const base = { line_id: lineId, email, display_name: displayName, webinar_date: webinarDate, webinar_link: webinarLink };
+
+  if (!lineId) return { ...base, status: 'skipped' };
+
+  const safeWebinarDate = /^\d{4}-\d{2}-\d{2}$/.test(webinarDate) ? webinarDate : '';
+
+  try {
+    // Find existing — parallel lookups when possible
+    let existing: any = null;
+    const { data: byLineId } = await supabase
+      .from('contacts')
+      .select('id, line_id, name, email, webinar_date, webinar_link')
+      .eq('line_id', lineId)
+      .limit(1);
+    existing = byLineId?.[0] ?? null;
+
+    if (!existing && email) {
+      const { data: byEmail } = await supabase
+        .from('contacts')
+        .select('id, line_id, name, email, webinar_date, webinar_link')
+        .eq('email', email)
+        .limit(1);
+      existing = byEmail?.[0] ?? null;
+    }
+
+    const now = new Date().toISOString();
+
+    if (existing) {
+      const patch: Record<string, string> = { updated_at: now };
+      if (!existing.line_id && lineId) patch.line_id = lineId;
+      if (!existing.name && displayName) patch.name = displayName;
+      if (!existing.email && email) patch.email = email;
+      if (!existing.webinar_date && safeWebinarDate) patch.webinar_date = safeWebinarDate;
+      if (!existing.webinar_link && webinarLink) patch.webinar_link = webinarLink;
+
+      if (Object.keys(patch).length <= 1) {
+        return { ...base, status: 'already_had' };
+      }
+
+      await supabase.from('contacts').update(patch).eq('id', existing.id);
+
+      const actions: string[] = [];
+      if (patch.line_id) actions.push(`LINE ID`);
+      if (patch.name) actions.push(`name`);
+      if (patch.email) actions.push(`email`);
+      if (patch.webinar_date) actions.push(`webinar date`);
+      if (patch.webinar_link) actions.push(`webinar link`);
+
+      // Fire-and-forget history insert
+      supabase.from('contact_history').insert({
+        contact_id: existing.id,
+        action: `CSV import: updated ${actions.join(', ')}`,
+      }).then(() => {});
+
+      return { ...base, status: existing.line_id ? 'updated' : 'linked' };
+    }
+
+    // Create new contact
+    const { data: newContact, error: insertError } = await supabase
+      .from('contacts')
+      .insert({
+        line_id: lineId,
+        name: displayName || '',
+        email: email || '',
+        phone: '',
+        tags: [],
+        status: 'Lead',
+        uid: '',
+        webinar_date: safeWebinarDate || null,
+        webinar_link: webinarLink || null,
+      })
+      .select('id')
+      .single();
+
+    if (insertError) return { ...base, status: 'skipped' };
+
+    // Fire-and-forget history
+    supabase.from('contact_history').insert({
+      contact_id: newContact.id,
+      action: 'Contact created via LINE CSV import',
+    }).then(() => {});
+
+    return { ...base, status: 'created' };
+  } catch {
+    return { ...base, status: 'skipped' };
+  }
+}
+
+// POST — process a batch of rows (frontend sends batches of 50)
 export async function POST(req: Request) {
   try {
     const { rows } = await req.json() as { rows: ImportRow[] };
@@ -24,115 +116,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'rows array required' }, { status: 400 });
     }
 
+    // Process rows in parallel groups of 10 for speed
+    const CONCURRENCY = 10;
     const results: RowResult[] = [];
 
-    for (const row of rows) {
-      const lineId = (row.line_id || '').trim();
-      const email = (row.email || '').trim().toLowerCase();
-      const displayName = (row.display_name || '').trim();
-      const webinarDate = (row.webinar_date || '').trim();
-      const webinarLink = (row.webinar_link || '').trim();
-
-      // line_id is required
-      if (!lineId) {
-        results.push({ ...row, status: 'skipped' });
-        continue;
-      }
-
-      // Validate webinar date format (YYYY-MM-DD)
-      const safeWebinarDate = /^\d{4}-\d{2}-\d{2}$/.test(webinarDate) ? webinarDate : '';
-
-      // 1. Try find by line_id (limit 1 — safe even if DB has duplicate line_ids)
-      let existing: any = null;
-      {
-        const { data } = await supabase
-          .from('contacts')
-          .select('*')
-          .eq('line_id', lineId)
-          .limit(1);
-        existing = data?.[0] ?? null;
-      }
-
-      // 2. Try find by email if no line_id match (limit 1 — safe against duplicate emails)
-      if (!existing && email) {
-        const { data } = await supabase
-          .from('contacts')
-          .select('*')
-          .eq('email', email)
-          .limit(1);
-        existing = data?.[0] ?? null;
-      }
-
-      const now = new Date().toISOString();
-
-      if (existing) {
-        // Build update payload — only fill in blank fields
-        const patch: Record<string, string> = { updated_at: now };
-        if (!existing.line_id && lineId) patch.line_id = lineId;
-        if (!existing.name && displayName) patch.name = displayName;
-        if (!existing.email && email) patch.email = email;
-        if (!existing.webinar_date && safeWebinarDate) patch.webinar_date = safeWebinarDate;
-        if (!existing.webinar_link && webinarLink) patch.webinar_link = webinarLink;
-
-        const hasChanges = Object.keys(patch).length > 1; // more than just updated_at
-        const alreadyFullyLinked =
-          existing.line_id === lineId &&
-          !(!existing.name && displayName) &&
-          !(!existing.email && email) &&
-          !(!existing.webinar_date && safeWebinarDate) &&
-          !(!existing.webinar_link && webinarLink);
-
-        if (alreadyFullyLinked) {
-          results.push({ line_id: lineId, email, display_name: displayName, webinar_date: webinarDate, webinar_link: webinarLink, status: 'already_had' });
-          continue;
-        }
-
-        if (hasChanges) {
-          await supabase.from('contacts').update(patch).eq('id', existing.id);
-          const actions: string[] = [];
-          if (patch.line_id) actions.push(`LINE ID: ${lineId}`);
-          if (patch.name) actions.push(`display name: ${displayName}`);
-          if (patch.email) actions.push(`email: ${email}`);
-          if (patch.webinar_date) actions.push(`webinar date: ${safeWebinarDate}`);
-          if (patch.webinar_link) actions.push(`webinar link`);
-          await supabase.from('contact_history').insert({
-            contact_id: existing.id,
-            action: `Updated via LINE CSV import: ${actions.join(', ')}`,
-          });
-          results.push({ line_id: lineId, email, display_name: displayName, webinar_date: webinarDate, webinar_link: webinarLink, status: existing.line_id ? 'updated' : 'linked' });
-        } else {
-          results.push({ line_id: lineId, email, display_name: displayName, webinar_date: webinarDate, webinar_link: webinarLink, status: 'already_had' });
-        }
-      } else {
-        // Create new contact
-        const { data: newContact, error: insertError } = await supabase
-          .from('contacts')
-          .insert({
-            line_id: lineId,
-            name: displayName || '',
-            email: email || '',
-            phone: '',
-            tags: [],
-            status: 'Lead',
-            uid: '',
-            webinar_date: safeWebinarDate || null,
-            webinar_link: webinarLink || null,
-          })
-          .select('id')
-          .single();
-
-        if (insertError) {
-          results.push({ line_id: lineId, email, display_name: displayName, webinar_date: webinarDate, webinar_link: webinarLink, status: 'skipped' });
-          continue;
-        }
-
-        await supabase.from('contact_history').insert({
-          contact_id: newContact.id,
-          action: `Contact created via LINE CSV import`,
-        });
-
-        results.push({ line_id: lineId, email, display_name: displayName, webinar_date: webinarDate, webinar_link: webinarLink, status: 'created' });
-      }
+    for (let i = 0; i < rows.length; i += CONCURRENCY) {
+      const chunk = rows.slice(i, i + CONCURRENCY);
+      const chunkResults = await Promise.all(chunk.map(processRow));
+      results.push(...chunkResults);
     }
 
     return NextResponse.json({

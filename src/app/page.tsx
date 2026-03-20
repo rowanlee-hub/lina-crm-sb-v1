@@ -3714,6 +3714,7 @@ function LineMatchView() {
   const [results, setResults] = useState<RowResult[] | null>(null);
   const [summary, setSummary] = useState<{ created: number; linked: number; updated: number; already_had: number; skipped: number } | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [parseError, setParseError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -3803,26 +3804,59 @@ function LineMatchView() {
 
   const handleRun = async () => {
     if (rows.length === 0) return;
-    setIsRunning(true); setResults(null); setSummary(null);
+    setIsRunning(true); setResults(null); setSummary(null); setParseError('');
+
+    const BATCH_SIZE = 50;
+    const allResults: RowResult[] = [];
+    const totals = { created: 0, linked: 0, updated: 0, already_had: 0, skipped: 0 };
+
     try {
-      const res = await fetch('/api/contacts/link-line-id', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Failed');
-      setResults(data.results);
-      setSummary({ created: data.created, linked: data.linked, updated: data.updated, already_had: data.already_had, skipped: data.skipped });
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        setProgress({ done: i, total: rows.length });
+
+        const res = await fetch('/api/contacts/link-line-id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: batch }),
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          // Log error but continue with remaining batches
+          batch.forEach(r => allResults.push({ ...r, status: 'skipped' }));
+          totals.skipped += batch.length;
+          continue;
+        }
+
+        allResults.push(...data.results);
+        totals.created += data.created || 0;
+        totals.linked += data.linked || 0;
+        totals.updated += data.updated || 0;
+        totals.already_had += data.already_had || 0;
+        totals.skipped += data.skipped || 0;
+      }
+
+      setProgress({ done: rows.length, total: rows.length });
+      setResults(allResults);
+      setSummary(totals);
     } catch (err: unknown) {
-      setParseError(err instanceof Error ? err.message : 'Something went wrong');
+      if (allResults.length > 0) {
+        // Partial success — show what we got
+        setResults(allResults);
+        setSummary(totals);
+        setParseError(`Import partially completed (${allResults.length}/${rows.length}). ${err instanceof Error ? err.message : 'Network error on remaining batches.'}`);
+      } else {
+        setParseError(err instanceof Error ? err.message : 'Something went wrong');
+      }
     } finally {
       setIsRunning(false);
+      setProgress(null);
     }
   };
 
   const reset = () => {
-    setRows([]); setPreview([]); setDupCount(0); setResults(null); setSummary(null); setParseError('');
+    setRows([]); setPreview([]); setDupCount(0); setResults(null); setSummary(null); setParseError(''); setProgress(null);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -3921,7 +3955,7 @@ function LineMatchView() {
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50 transition-all"
                   >
                     {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitMerge className="w-4 h-4" />}
-                    {isRunning ? 'Importing…' : `Import ${rows.length} rows`}
+                    {isRunning && progress ? `Importing… ${progress.done}/${progress.total}` : isRunning ? 'Importing…' : `Import ${rows.length} rows`}
                   </button>
                   <button onClick={reset} className="px-4 py-2.5 border border-slate-200 text-slate-500 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-all">
                     Clear
