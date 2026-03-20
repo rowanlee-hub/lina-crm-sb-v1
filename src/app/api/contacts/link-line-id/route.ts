@@ -42,25 +42,25 @@ export async function POST(req: Request) {
       // Validate webinar date format (YYYY-MM-DD)
       const safeWebinarDate = /^\d{4}-\d{2}-\d{2}$/.test(webinarDate) ? webinarDate : '';
 
-      // 1. Try find by line_id
+      // 1. Try find by line_id (limit 1 — safe even if DB has duplicate line_ids)
       let existing: any = null;
       {
         const { data } = await supabase
           .from('contacts')
           .select('*')
           .eq('line_id', lineId)
-          .maybeSingle();
-        existing = data;
+          .limit(1);
+        existing = data?.[0] ?? null;
       }
 
-      // 2. Try find by email if no line_id match
+      // 2. Try find by email if no line_id match (limit 1 — safe against duplicate emails)
       if (!existing && email) {
         const { data } = await supabase
           .from('contacts')
           .select('*')
           .eq('email', email)
-          .maybeSingle();
-        existing = data;
+          .limit(1);
+        existing = data?.[0] ?? null;
       }
 
       const now = new Date().toISOString();

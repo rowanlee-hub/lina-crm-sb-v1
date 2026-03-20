@@ -3507,6 +3507,7 @@ type RowResult = ImportRow & { status: 'created' | 'linked' | 'updated' | 'skipp
 function LineMatchView() {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [preview, setPreview] = useState<ImportRow[]>([]);
+  const [dupCount, setDupCount] = useState(0);
   const [results, setResults] = useState<RowResult[] | null>(null);
   const [summary, setSummary] = useState<{ created: number; linked: number; updated: number; already_had: number; skipped: number } | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -3585,8 +3586,14 @@ function LineMatchView() {
         });
       }
       if (parsed.length === 0) { setParseError('No valid rows found (line_id column was empty for all rows).'); return; }
-      setRows(parsed);
-      setPreview(parsed.slice(0, 5));
+
+      // Deduplicate by line_id — keep last occurrence (most complete data)
+      const seen = new Map<string, ImportRow>();
+      for (const r of parsed) seen.set(r.line_id, r);
+      const deduped = Array.from(seen.values());
+      setDupCount(parsed.length - deduped.length);
+      setRows(deduped);
+      setPreview(deduped.slice(0, 5));
     };
     reader.readAsText(file);
   };
@@ -3612,7 +3619,7 @@ function LineMatchView() {
   };
 
   const reset = () => {
-    setRows([]); setPreview([]); setResults(null); setSummary(null); setParseError('');
+    setRows([]); setPreview([]); setDupCount(0); setResults(null); setSummary(null); setParseError('');
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -3669,7 +3676,15 @@ function LineMatchView() {
 
             {preview.length > 0 && (
               <div className="space-y-3">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{rows.length} rows loaded — preview (first 5)</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{rows.length} unique rows loaded — preview (first 5)</p>
+                  {dupCount > 0 && (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
+                      <AlertCircle className="w-3 h-3" />
+                      {dupCount} duplicate{dupCount > 1 ? 's' : ''} removed
+                    </span>
+                  )}
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs border-collapse">
                     <thead>
