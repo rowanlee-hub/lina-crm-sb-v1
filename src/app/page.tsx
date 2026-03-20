@@ -417,7 +417,7 @@ function CRMDashboard() {
 
       {/* PANE 1: Master List Pane (Middle-Left) */}
       {activeTab !== 'marketing' && (
-        <main className={`w-full max-w-[360px] bg-white border-r border-slate-200 flex flex-col shrink-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] ${sheetMode && activeTab === 'contacts' ? 'hidden' : ''}`}>
+        <main className={`w-full max-w-[360px] bg-white border-r border-slate-200 flex flex-col shrink-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] relative overflow-hidden ${sheetMode && activeTab === 'contacts' ? 'hidden' : ''}`}>
           <div className="p-5 border-b border-slate-100 flex flex-col space-y-4 bg-white/50 backdrop-blur-sm sticky top-0 z-20">
             <div className="flex items-center justify-between">
               <div>
@@ -558,6 +558,123 @@ function CRMDashboard() {
               ))
             )}
           </div>
+
+          {/* ── FILTER DRAWER (scoped inside PANE 1) ─────────────────── */}
+          {showFilterDrawer && (
+            <div className="absolute inset-0 bg-black/20 z-40" onClick={() => setShowFilterDrawer(false)} />
+          )}
+          <div className={`absolute inset-y-0 left-0 w-full bg-white z-50 flex flex-col transition-transform duration-300 ease-in-out ${showFilterDrawer ? 'translate-x-0' : '-translate-x-full'}`}>
+            {/* Drawer header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+              <div>
+                <h2 className="font-extrabold text-slate-900 text-base">Filters</h2>
+                {activeFilterCount > 0 && <p className="text-[10px] text-blue-600 font-bold">{activeFilterCount} active filter{activeFilterCount > 1 ? 's' : ''}</p>}
+              </div>
+              <div className="flex items-center gap-2">
+                {activeFilterCount > 0 && (
+                  <button onClick={clearAllFilters} className="text-xs text-red-500 font-bold hover:text-red-700 transition-colors">Clear all</button>
+                )}
+                <button onClick={() => setShowFilterDrawer(false)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Drawer body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-6 text-xs">
+              {/* Status */}
+              <div>
+                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">Status</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {['Lead', 'Nurturing', 'Customer', 'Closed'].map(s => (
+                    <button key={s}
+                      onClick={() => setFilterStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
+                      className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterStatus.includes(s) ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                    >{s}</button>
+                  ))}
+                </div>
+              </div>
+              {/* LINE Status */}
+              <div>
+                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">LINE Status</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[['any','Any'],['linked','Linked'],['unlinked','LINE Only'],['none','No LINE']].map(([v, l]) => (
+                    <button key={v}
+                      onClick={() => setFilterLine(v as typeof filterLine)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterLine === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                    >{l}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Webinar */}
+              <div>
+                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">Webinar</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[['any','Any'],['upcoming','Upcoming'],['past','Past'],['none','None']].map(([v, l]) => (
+                    <button key={v}
+                      onClick={() => setFilterWebinar(v as typeof filterWebinar)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterWebinar === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                    >{l}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Attended */}
+              <div>
+                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">Attended</p>
+                <div className="flex gap-1.5">
+                  {[['any','Any'],['yes','Yes'],['no','No']].map(([v, l]) => (
+                    <button key={v}
+                      onClick={() => setFilterAttended(v as typeof filterAttended)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterAttended === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                    >{l}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Purchased */}
+              <div>
+                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">Purchased</p>
+                <div className="flex gap-1.5">
+                  {[['any','Any'],['yes','Yes'],['no','No']].map(([v, l]) => (
+                    <button key={v}
+                      onClick={() => setFilterPurchased(v as typeof filterPurchased)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterPurchased === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                    >{l}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Tags — multi-select */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Tags</p>
+                  {filterTags.length > 0 && (
+                    <button onClick={() => setFilterTags([])} className="text-[10px] text-red-400 font-bold hover:text-red-600">Clear</button>
+                  )}
+                </div>
+                {filterTags.length > 0 && (
+                  <p className="text-[10px] text-slate-400 mb-2">Contacts with <span className="font-bold text-blue-600">any</span> selected tag</p>
+                )}
+                <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                  {getAllUniqueTags(contacts).map(tag => (
+                    <button key={tag}
+                      onClick={() => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
+                      className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterTags.includes(tag) ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                    >{tag}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer footer */}
+            <div className="px-5 py-4 border-t border-slate-100 shrink-0">
+              <button
+                onClick={() => setShowFilterDrawer(false)}
+                className="w-full py-2.5 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
+              >
+                Show {filteredContacts.length} contact{filteredContacts.length !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+
         </main>
       )}
 
@@ -762,135 +879,6 @@ function CRMDashboard() {
         )}
       </section>
 
-      {/* ── FILTER DRAWER ─────────────────────────────────────────────────── */}
-      {/* Backdrop */}
-      {showFilterDrawer && (
-        <div
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
-          onClick={() => setShowFilterDrawer(false)}
-        />
-      )}
-      {/* Drawer panel — slides in from the left, after the 72px nav */}
-      <div
-        className={`fixed top-0 left-[72px] h-full w-[300px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-in-out ${showFilterDrawer ? 'translate-x-0' : '-translate-x-full'}`}
-      >
-        {/* Drawer header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
-          <div>
-            <h2 className="font-extrabold text-slate-900 text-base">Filters</h2>
-            {activeFilterCount > 0 && <p className="text-[10px] text-blue-600 font-bold">{activeFilterCount} active filter{activeFilterCount > 1 ? 's' : ''}</p>}
-          </div>
-          <div className="flex items-center gap-2">
-            {activeFilterCount > 0 && (
-              <button onClick={clearAllFilters} className="text-xs text-red-500 font-bold hover:text-red-700 transition-colors">Clear all</button>
-            )}
-            <button onClick={() => setShowFilterDrawer(false)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-all">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Drawer body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6 text-xs">
-
-          {/* Status */}
-          <div>
-            <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">Status</p>
-            <div className="flex flex-wrap gap-1.5">
-              {['Lead', 'Nurturing', 'Customer', 'Closed'].map(s => (
-                <button key={s}
-                  onClick={() => setFilterStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
-                  className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterStatus.includes(s) ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
-                >{s}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* LINE Status */}
-          <div>
-            <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">LINE Status</p>
-            <div className="flex flex-wrap gap-1.5">
-              {[['any','Any'],['linked','Linked'],['unlinked','LINE Only'],['none','No LINE']].map(([v, l]) => (
-                <button key={v}
-                  onClick={() => setFilterLine(v as typeof filterLine)}
-                  className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterLine === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
-                >{l}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Webinar */}
-          <div>
-            <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">Webinar</p>
-            <div className="flex flex-wrap gap-1.5">
-              {[['any','Any'],['upcoming','Upcoming'],['past','Past'],['none','None']].map(([v, l]) => (
-                <button key={v}
-                  onClick={() => setFilterWebinar(v as typeof filterWebinar)}
-                  className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterWebinar === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
-                >{l}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Attended */}
-          <div>
-            <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">Attended</p>
-            <div className="flex gap-1.5">
-              {[['any','Any'],['yes','Yes'],['no','No']].map(([v, l]) => (
-                <button key={v}
-                  onClick={() => setFilterAttended(v as typeof filterAttended)}
-                  className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterAttended === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
-                >{l}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Purchased */}
-          <div>
-            <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-2">Purchased</p>
-            <div className="flex gap-1.5">
-              {[['any','Any'],['yes','Yes'],['no','No']].map(([v, l]) => (
-                <button key={v}
-                  onClick={() => setFilterPurchased(v as typeof filterPurchased)}
-                  className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterPurchased === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
-                >{l}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Tags — multi-select */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Tags</p>
-              {filterTags.length > 0 && (
-                <button onClick={() => setFilterTags([])} className="text-[10px] text-red-400 font-bold hover:text-red-600">Clear</button>
-              )}
-            </div>
-            {filterTags.length > 0 && (
-              <p className="text-[10px] text-slate-400 mb-2">Showing contacts with <span className="font-bold text-blue-600">any</span> of the selected tags</p>
-            )}
-            <div className="flex flex-wrap gap-1.5 max-h-52 overflow-y-auto pr-1">
-              {getAllUniqueTags(contacts).map(tag => (
-                <button key={tag}
-                  onClick={() => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
-                  className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterTags.includes(tag) ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
-                >{tag}</button>
-              ))}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Drawer footer */}
-        <div className="px-5 py-4 border-t border-slate-100 shrink-0">
-          <button
-            onClick={() => setShowFilterDrawer(false)}
-            className="w-full py-2.5 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 active:scale-[0.98] transition-all"
-          >
-            Show {filteredContacts.length} contact{filteredContacts.length !== 1 ? 's' : ''}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
