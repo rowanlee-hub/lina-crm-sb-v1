@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
  * Uses upsert so concurrent webhook calls never create two contacts
  * for the same line_id.
  */
-async function getOrCreateLineContact(userId: string, extraTags: string[] = []) {
+async function getOrCreateLineContact(userId: string, extraTags: string[] = []): Promise<{ contact: any; isNew: boolean } | null> {
   // First try a fast read
   const { data: existing } = await supabase
     .from('contacts')
@@ -21,10 +21,10 @@ async function getOrCreateLineContact(userId: string, extraTags: string[] = []) 
       const merged = [...new Set([...(existing.tags || []), ...extraTags])];
       if (merged.length !== (existing.tags || []).length) {
         await supabase.from('contacts').update({ tags: merged }).eq('id', existing.id);
-        return { ...existing, tags: merged };
+        return { contact: { ...existing, tags: merged }, isNew: false };
       }
     }
-    return existing;
+    return { contact: existing, isNew: false };
   }
 
   // Not found — fetch display name then upsert (handles race between two concurrent requests)
@@ -39,12 +39,11 @@ async function getOrCreateLineContact(userId: string, extraTags: string[] = []) 
     .single();
 
   if (error) {
-    // Upsert failed (e.g. no unique constraint) — fall back to a fresh read
     console.warn('[getOrCreateLineContact] upsert error, falling back to read:', error.message);
     const { data: fallback } = await supabase.from('contacts').select('*').eq('line_id', userId).single();
-    return fallback ?? null;
+    return fallback ? { contact: fallback, isNew: false } : null;
   }
-  return upserted;
+  return { contact: upserted, isNew: true };
 }
 
 // Fetch LINE user profile to get display name
@@ -174,12 +173,21 @@ export async function POST(req: Request) {
       // Ensure user exists in Supabase
       if (event.type === 'follow') {
         console.log(`User ${userId} followed the account.`);
-        const contact = await getOrCreateLineContact(userId, ['Followed']);
-        if (!contact) continue;
+        const result = await getOrCreateLineContact(userId, ['Followed']);
+        if (!result) continue;
+        const { contact, isNew } = result;
 
         await supabase.from('contact_history').insert({ contact_id: contact.id, action: 'Event: Follow' });
-        const { processAutomations } = await import('@/lib/automation-engine');
-        processAutomations('USER_FOLLOW', 'FOLLOW', contact.id, userId);
+
+        // Only trigger USER_FOLLOW automation for brand new contacts.
+        // Block/unblock returners already exist in Supabase — skip to avoid re-enrolling.
+        if (isNew) {
+          console.log(`[Webhook] New follower ${userId} — triggering USER_FOLLOW automation`);
+          const { processAutomations } = await import('@/lib/automation-engine');
+          processAutomations('USER_FOLLOW', 'FOLLOW', contact.id, userId);
+        } else {
+          console.log(`[Webhook] Returning follower ${userId} (block/unblock) — skipping automation`);
+        }
       }
 
       // ─── POSTBACK event: from rich menu buttons / flex message buttons ───
@@ -187,8 +195,9 @@ export async function POST(req: Request) {
         const data = event.postback?.data || '';
         console.log(`[Webhook] Postback from ${userId}: ${data}`);
 
-        const contact = await getOrCreateLineContact(userId);
-        if (!contact) continue;
+        const result = await getOrCreateLineContact(userId);
+        if (!result) continue;
+        const { contact } = result;
 
         const contactId = contact.id;
         await supabase.from('contact_history').insert({ contact_id: contactId, action: `Postback: ${data}` });
@@ -221,8 +230,9 @@ export async function POST(req: Request) {
         const rawText = event.message.text;
         const messageText = rawText.toLowerCase().trim();
 
-        let contact = await getOrCreateLineContact(userId);
-        if (!contact) continue;
+        const lineResult = await getOrCreateLineContact(userId);
+        if (!lineResult) continue;
+        let contact = lineResult.contact;
 
         let contactId = contact.id;
 
