@@ -1,73 +1,52 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-const GHL_BASE = 'https://services.leadconnectorhq.com';
+// Supports both GHL API v1 (rest.gohighlevel.com) and v2 (services.leadconnectorhq.com)
+// v1 uses a simple location-level API key; v2 uses PITs with location token exchange.
 const GHL_KEY = process.env.GHL_API_KEY || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 
-function ghlHeaders(token: string) {
-  return {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-    'Version': '2021-07-28',
-  };
-}
-
-/**
- * Agency PIT → exchange for a location-scoped access token.
- * Required when using a Private Integration Token (pit-xxx) at agency level.
- */
-async function getLocationToken(): Promise<string> {
-  // First get the companyId from the location info
-  const locRes = await fetch(`${GHL_BASE}/locations/${GHL_LOCATION_ID}`, {
-    headers: ghlHeaders(GHL_KEY),
-  });
-
-  let companyId: string | undefined;
-  if (locRes.ok) {
-    const locData = await locRes.json();
-    companyId = locData.location?.companyId;
-  }
-
-  if (!companyId) {
-    // Fall back: try using the key directly (might be a location-level key)
-    return GHL_KEY;
-  }
-
-  // Exchange agency token for location token
-  const tokenRes = await fetch(`${GHL_BASE}/oauth/locationToken`, {
-    method: 'POST',
-    headers: ghlHeaders(GHL_KEY),
-    body: JSON.stringify({ companyId, locationId: GHL_LOCATION_ID }),
-  });
-
-  if (!tokenRes.ok) {
-    // Fall back to original key
-    return GHL_KEY;
-  }
-
-  const tokenData = await tokenRes.json();
-  return tokenData.access_token || GHL_KEY;
-}
-
 /**
  * Fetch one page of contacts from GHL.
- * Uses cursor-based pagination (startAfterId).
+ * Tries v1 API first (simpler, location-scoped key), falls back to v2.
  */
-async function fetchGHLPage(token: string, startAfterId?: string): Promise<{ contacts: any[]; nextCursor: string | null }> {
-  const params = new URLSearchParams({ locationId: GHL_LOCATION_ID, limit: '100' });
-  if (startAfterId) params.set('startAfterId', startAfterId);
+async function fetchGHLPage(skip: number): Promise<{ contacts: any[]; hasMore: boolean }> {
+  // Try v1 API (works with location-level API key)
+  const v1Url = `https://rest.gohighlevel.com/v1/contacts/?limit=100&skip=${skip}`;
+  const v1Res = await fetch(v1Url, {
+    headers: {
+      'Authorization': `Bearer ${GHL_KEY}`,
+      'Content-Type': 'application/json',
+    },
+  });
 
-  const res = await fetch(`${GHL_BASE}/contacts/?${params}`, { headers: ghlHeaders(token) });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`GHL API error ${res.status}: ${err}`);
+  if (v1Res.ok) {
+    const data = await v1Res.json();
+    const contacts = data.contacts ?? [];
+    const total = data.meta?.total ?? contacts.length;
+    return { contacts, hasMore: skip + contacts.length < total };
   }
-  const data = await res.json();
+
+  // Fall back to v2 API
+  const v2Url = `https://services.leadconnectorhq.com/contacts/?locationId=${GHL_LOCATION_ID}&limit=100&skip=${skip}`;
+  const v2Res = await fetch(v2Url, {
+    headers: {
+      'Authorization': `Bearer ${GHL_KEY}`,
+      'Content-Type': 'application/json',
+      'Version': '2021-07-28',
+    },
+  });
+
+  if (!v2Res.ok) {
+    const err = await v2Res.text();
+    throw new Error(`GHL API error ${v2Res.status}: ${err}`);
+  }
+  const data = await v2Res.json();
   const contacts = data.contacts ?? [];
-  const nextCursor = data.meta?.startAfterId && data.meta?.nextPage ? data.meta.startAfterId : null;
-  return { contacts, nextCursor };
+  const total = data.meta?.total ?? contacts.length;
+  return { contacts, hasMore: skip + contacts.length < total };
 }
+
 
 /**
  * Upsert a single GHL contact into Supabase using the same logic as the webhook.
@@ -160,15 +139,16 @@ export async function POST() {
   let updated = 0;
   let skipped = 0;
   let errors = 0;
-  let cursor: string | undefined;
+  let skip = 0;
   let pages = 0;
 
   try {
-    const token = await getLocationToken();
-
-    do {
-      const { contacts, nextCursor } = await fetchGHLPage(token, cursor);
+    let hasMore = true;
+    while (hasMore && pages < 20) {
+      const { contacts, hasMore: more } = await fetchGHLPage(skip);
       pages++;
+      hasMore = more;
+      skip += contacts.length;
 
       for (const c of contacts) {
         try {
@@ -182,10 +162,8 @@ export async function POST() {
         }
       }
 
-      cursor = nextCursor ?? undefined;
-      // Safety: stop after 20 pages (2000 contacts) to avoid timeout
-      if (pages >= 20) break;
-    } while (cursor);
+      if (contacts.length === 0) break;
+    }
 
     return NextResponse.json({
       success: true,
