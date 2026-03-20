@@ -953,14 +953,15 @@ interface ContactDetailViewProps {
 }
 
 function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allContacts, onSwitchContact, onGoToInbox }: ContactDetailViewProps) {
-  const safeContactData: Contact = {
-      ...contactData,
-      tags: contactData.tags || [],
-      webinar: contactData.webinar || { link: "", dateTime: "" },
-      status: contactData.status || "Lead",
-      history: contactData.history || []
-  };
-  const [contact, setContact] = useState<Contact>(safeContactData);
+  const makeSafe = (d: Contact): Contact => ({
+    ...d,
+    tags: d.tags || [],
+    webinar: d.webinar || { link: "", dateTime: "" },
+    status: d.status || "Lead",
+    history: d.history || []
+  });
+  const originalDataRef = useRef<Contact>(makeSafe(contactData));
+  const [contact, setContact] = useState<Contact>(makeSafe(contactData));
   const [newTag, setNewTag] = useState("");
   const [tagSuggestions, setTagSuggestions] = useState<Array<{name: string; colour: string}>>([]);
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
@@ -1011,14 +1012,10 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
   }, []);
 
   useEffect(() => {
-    // Also reset form state if contactData changes (switched contact via search)
-    setContact({
-        ...contactData,
-        tags: contactData.tags || [],
-        webinar: contactData.webinar || { link: "", dateTime: "" },
-        status: contactData.status || "Lead",
-        history: contactData.history || []
-    });
+    // Reset form state only when switching to a different contact (ID change)
+    const safe = makeSafe(contactData);
+    originalDataRef.current = safe;
+    setContact(safe);
     setLineMessageText("");
     setMessageFeedback({ type: "", text: "" });
     // Fetch webinar enrollment for this contact
@@ -1034,16 +1031,17 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
         .then(data => setWbMessages(Array.isArray(data) ? data : []))
         .catch(() => {});
     }
-  }, [contactData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contactData.id]);
 
   useEffect(() => {
-    const isDifferent = JSON.stringify(safeContactData) !== JSON.stringify(contact);
+    const isDifferent = JSON.stringify(originalDataRef.current) !== JSON.stringify(contact);
     if (isNew) {
       setHasUnsavedChanges(contact.name?.trim().length > 0 || isDifferent);
     } else {
       setHasUnsavedChanges(isDifferent);
     }
-  }, [contact, safeContactData, isNew]);
+  }, [contact, isNew]);
 
   const handleAddTag = (tagValue?: string) => {
     const tag = (tagValue || newTag).trim();
@@ -1097,6 +1095,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
          setSaveSuccess(result.message || "Saved successfully!");
          onSaveSuccess(savedContact);
          setContact(savedContact); // Sync local state
+         originalDataRef.current = makeSafe(savedContact); // Update baseline so form is clean
          setTimeout(() => setSaveSuccess(""), 4000);
       } else {
          throw new Error(result.error || "Save operation failed.");
