@@ -37,7 +37,6 @@ interface Contact {
   phone: string;
   lineId: string;
   tags: string[];
-  ghl_tags?: string[];
   status: string;
   webinar: {
     link: string;
@@ -1593,46 +1592,28 @@ function ConversationsView({ contacts, selectedId, onUpdateContact }: Conversati
                </div>
 
                <div className="space-y-3">
-                  {/* GHL Tags */}
-                  {activeContact.ghl_tags && activeContact.ghl_tags.length > 0 && (
-                    <div className="space-y-1.5">
-                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
-                        <TagIcon className="w-3.5 h-3.5 mr-1" /> GHL Tags
-                      </h3>
-                      <div className="flex flex-wrap gap-1.5">
-                        {activeContact.ghl_tags.map((tag: string, i: number) => (
-                          <span key={i} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-semibold border border-purple-200">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {/* Lina Tags */}
-                  <div className="space-y-1.5">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
-                       <TagIcon className="w-3.5 h-3.5 mr-1" /> Lina Tags
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5 min-h-[24px]">
-                       {activeContact.tags && activeContact.tags.length > 0 ? (
-                          activeContact.tags.map((tag: string, i: number) => (
-                             <span key={i} className="group px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-semibold border border-blue-200 flex items-center animate-in zoom-in-50">
-                                {tag}
-                                <button onClick={() => handleRemoveTag(tag)} className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500">
-                                  <X className="w-3 h-3" />
-                                </button>
-                             </span>
-                          ))
-                       ) : (
-                          <span className="text-xs text-slate-400 italic">No tags applied</span>
-                       )}
-                    </div>
-                    <div className="flex mt-2">
-                      <input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag(newTag)} placeholder="Add tag..." className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none"/>
-                      <button onClick={() => handleAddTag(newTag)} disabled={!newTag.trim() || isSavingTag} className="ml-2 w-8 h-8 flex items-center justify-center bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                        {isSavingTag ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-4 h-4" />}
-                      </button>
-                    </div>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
+                     <TagIcon className="w-3.5 h-3.5 mr-1" /> Tags
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                     {activeContact.tags && activeContact.tags.length > 0 ? (
+                        activeContact.tags.map((tag: string, i: number) => (
+                           <span key={i} className="group px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-semibold border border-blue-200 flex items-center animate-in zoom-in-50">
+                              {tag}
+                              <button onClick={() => handleRemoveTag(tag)} className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500">
+                                <X className="w-3 h-3" />
+                              </button>
+                           </span>
+                        ))
+                     ) : (
+                        <span className="text-xs text-slate-400 italic">No tags applied</span>
+                     )}
+                  </div>
+                  <div className="flex mt-2">
+                    <input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag(newTag)} placeholder="Add tag..." className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none"/>
+                    <button onClick={() => handleAddTag(newTag)} disabled={!newTag.trim() || isSavingTag} className="ml-2 w-8 h-8 flex items-center justify-center bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                      {isSavingTag ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    </button>
                   </div>
                </div>
 

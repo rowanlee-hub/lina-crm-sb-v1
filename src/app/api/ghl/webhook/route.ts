@@ -89,8 +89,8 @@ export async function POST(req: Request) {
     const dayOfWeek = now.getDay();
 
     if (existingContact) {
-      // Update existing contact — GHL tags go into ghl_tags, not tags
-      const mergedGhlTags = [...new Set([...(existingContact.ghl_tags || []), ...(tags || [])])];
+      // Update existing contact
+      const mergedTags = [...new Set([...(existingContact.tags || []), ...(tags || [])])];
       const { error: updateError } = await supabase.from('contacts').update({
         name: name || existingContact.name,
         email: email || existingContact.email,
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
         uid: uid || existingContact.uid || '',
         webinar_link: webinar_link || existingContact.webinar_link,
         webinar_date: webinar_date || existingContact.webinar_date,
-        ghl_tags: mergedGhlTags,
+        tags: mergedTags,
         signup_day: dayOfWeek,
         updated_at: now.toISOString(),
       }).eq('id', existingContact.id);
@@ -115,8 +115,8 @@ export async function POST(req: Request) {
         action: `GHL Sync: Updated from GoHighLevel`
       });
 
-      // Trigger automations for new GHL tags
-      const newTags = (tags || []).filter((t: string) => !(existingContact.ghl_tags || []).includes(t));
+      // Trigger automations for new tags
+      const newTags = (tags || []).filter((t: string) => !(existingContact.tags || []).includes(t));
       if (newTags.length > 0) {
         const { processAutomations } = await import('@/lib/automation-engine');
         for (const tag of newTags) {
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
         uid: uid || '',
         webinar_link: webinar_link || '',
         webinar_date: webinar_date || null,
-        ghl_tags: tags || [],
+        tags: tags || [],
         signup_day: dayOfWeek,
         status: 'Lead',
       }).select().single();
