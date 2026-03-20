@@ -7,7 +7,8 @@ import {
   Calendar, Link as LinkIcon, CheckCircle2,
   Save, RefreshCw, Plus, Search, ChevronRight, ArrowLeft,
   Copy, Check, X, Filter, Loader2, AlertCircle, History,
-  Send, Lock, Bell, Layout, List, Trash2, Megaphone, Pencil, Table2
+  Send, Lock, Bell, Layout, List, Trash2, Megaphone, Pencil,
+  Table2, Upload, GitMerge, UserPlus
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -71,8 +72,6 @@ function CRMDashboard() {
   const [activeWebinarDate, setActiveWebinarDate] = useState<string>('');
   const [isImporting, setIsImporting] = useState(false);
   const [isDeduping, setIsDeduping] = useState(false);
-  const [isGhlPulling, setIsGhlPulling] = useState(false);
-  const [ghlPullResult, setGhlPullResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // API States
@@ -166,25 +165,6 @@ function CRMDashboard() {
       alert('Dedup request failed');
     }
     setIsDeduping(false);
-  };
-
-  const handleGhlPull = async () => {
-    setIsGhlPulling(true);
-    setGhlPullResult(null);
-    try {
-      const res = await fetch('/api/ghl/pull-all', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        setGhlPullResult(`✓ Synced ${data.total} contacts — ${data.created} new, ${data.updated} updated${data.errors > 0 ? `, ${data.errors} errors` : ''}`);
-        fetchContacts();
-      } else {
-        setGhlPullResult(`✗ ${data.error}`);
-      }
-    } catch {
-      setGhlPullResult('✗ Sync request failed');
-    }
-    setIsGhlPulling(false);
-    setTimeout(() => setGhlPullResult(null), 8000);
   };
 
   const saveCell = async (contact: Contact, field: string, value: string) => {
@@ -439,8 +419,9 @@ function CRMDashboard() {
       {/* PANE 1: Master List Pane (Middle-Left) */}
       {activeTab !== 'marketing' && (
         <main className={`w-full max-w-[360px] bg-white border-r border-slate-200 flex flex-col shrink-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] relative overflow-hidden ${sheetMode && activeTab === 'contacts' ? 'hidden' : ''}`}>
-          <div className="p-5 border-b border-slate-100 flex flex-col space-y-4 bg-white/50 backdrop-blur-sm sticky top-0 z-20">
-            <div className="flex items-center justify-between">
+          <div className="border-b border-slate-100 flex flex-col bg-white/50 backdrop-blur-sm sticky top-0 z-20">
+            {/* Title + count */}
+            <div className="px-5 pt-4 pb-2 flex items-center justify-between">
               <div>
                 <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
                   {activeTab === 'inbox' ? 'Conversations' : 'Contacts'}
@@ -453,61 +434,56 @@ function CRMDashboard() {
                   </p>
                 )}
               </div>
-              <div className="flex items-center space-x-2">
-                {activeTab === 'contacts' && (
-                  <>
-                    <button
-                      onClick={() => setSheetMode(m => !m)}
-                      className={`p-1.5 rounded-lg transition-all shadow-sm active:scale-95 ${sheetMode ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-600'}`}
-                      title={sheetMode ? 'Switch to List view' : 'Switch to Sheet view'}
-                    >
-                      <Table2 className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={handleGhlPull}
-                      disabled={isGhlPulling}
-                      className="p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-green-100 hover:text-green-700 transition-all shadow-sm active:scale-95 disabled:opacity-50"
-                      title="Pull all contacts from GoHighLevel"
-                    >
-                      {isGhlPulling ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-                    </button>
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isImporting}
-                      className="p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all shadow-sm active:scale-95 disabled:opacity-50"
-                      title="Import CSV"
-                    >
-                      {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <LinkIcon className="w-5 h-5 rotate-45" />}
-                    </button>
-                    <button
-                      onClick={handleDedup}
-                      disabled={isDeduping}
-                      className="p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-orange-100 hover:text-orange-600 transition-all shadow-sm active:scale-95 disabled:opacity-50"
-                      title="Remove duplicate contacts"
-                    >
-                      {isDeduping ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-                    </button>
-                  </>
-                )}
-                <button 
-                  onClick={handleAddClick}
-                  className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95"
-                  title="Add New"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleCsvImport} 
-                  accept=".csv" 
-                  className="hidden" 
-                />
-              </div>
             </div>
-            
-            <div className="relative group">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+
+            {/* Action toolbar */}
+            {activeTab === 'contacts' && (
+              <div className="px-3 pb-3 flex items-center gap-1.5">
+                {/* Add Contact */}
+                <button
+                  onClick={handleAddClick}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-sm"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span className="text-[9px] font-bold uppercase tracking-wide">Add</span>
+                </button>
+
+                {/* Import CSV */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isImporting}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  <span className="text-[9px] font-bold uppercase tracking-wide">Import</span>
+                </button>
+
+                {/* Merge Duplicates */}
+                <button
+                  onClick={handleDedup}
+                  disabled={isDeduping}
+                  className="flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-orange-100 hover:text-orange-600 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isDeduping ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitMerge className="w-4 h-4" />}
+                  <span className="text-[9px] font-bold uppercase tracking-wide">Merge Dupes</span>
+                </button>
+
+                {/* Sheet View */}
+                <button
+                  onClick={() => setSheetMode(m => !m)}
+                  className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl active:scale-95 transition-all ${sheetMode ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-600'}`}
+                >
+                  <Table2 className="w-4 h-4" />
+                  <span className="text-[9px] font-bold uppercase tracking-wide">Sheet</span>
+                </button>
+
+                <input ref={fileInputRef} type="file" onChange={handleCsvImport} accept=".csv" className="hidden" />
+              </div>
+            )}
+
+            {/* Search */}
+            <div className="px-3 pb-3 relative group">
+              <Search className="absolute left-6 top-2.5 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input
                 type="text"
                 value={searchQuery}
@@ -516,11 +492,6 @@ function CRMDashboard() {
                 placeholder={`Search ${activeTab}...`}
               />
             </div>
-            {ghlPullResult && (
-              <div className={`text-xs font-medium px-3 py-2 rounded-lg ${ghlPullResult.startsWith('✓') ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-                {ghlPullResult}
-              </div>
-            )}
             {activeTab === 'contacts' && (
               <div className="flex gap-2">
                 <button
