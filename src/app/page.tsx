@@ -962,9 +962,9 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
   const [lineMessageText, setLineMessageText] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [messageFeedback, setMessageFeedback] = useState<{ type: string; text: string }>({ type: "", text: "" });
+  const [wbEnrollment, setWbEnrollment] = useState<any>(null);
+  const [wbMessages, setWbMessages] = useState<any[]>([]);
   const [webinarDateOptions, setWebinarDateOptions] = useState<{ label: string; value: string }[]>([]);
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string; content: string }>>([]);
-  const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
 
   // Load tag definitions for autocomplete
   useEffect(() => {
@@ -1003,14 +1003,20 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
     });
     setLineMessageText("");
     setMessageFeedback({ type: "", text: "" });
+    // Fetch webinar enrollment for this contact
+    if (contactData.id && !isNew) {
+      fetch(`/api/webinar-sequence/enrollments?contact_id=${contactData.id}`)
+        .then(r => r.json())
+        .then(data => {
+          const enrollment = Array.isArray(data) ? data.find((e: any) => e.contact_id === contactData.id) : null;
+          setWbEnrollment(enrollment ?? null);
+        }).catch(() => {});
+      fetch(`/api/webinar-sequence/messages?contact_id=${contactData.id}`)
+        .then(r => r.json())
+        .then(data => setWbMessages(Array.isArray(data) ? data : []))
+        .catch(() => {});
+    }
   }, [contactData]);
-
-  // Load templates once
-  useEffect(() => {
-    fetch('/api/templates').then(r => r.json()).then(data => {
-      if (Array.isArray(data)) setTemplates(data);
-    }).catch(() => {});
-  }, []);
 
   useEffect(() => {
     const isDifferent = JSON.stringify(safeContactData) !== JSON.stringify(contact);
@@ -1536,35 +1542,41 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                   </div>
                 )}
 
-                {/* --- Templates (quick copy) --- */}
-                {!isNew && templates.length > 0 && (
+                {/* --- Webinar Sequence Status --- */}
+                {!isNew && (wbEnrollment || wbMessages.length > 0) && (
                   <div className="border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
-                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-                      <Layout className="w-4 h-4 text-blue-500" />
-                      <h3 className="text-sm font-semibold text-slate-700 tracking-wide">Templates</h3>
-                      <span className="ml-auto text-[10px] text-slate-400">Click to copy</span>
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-blue-500" />
+                        <h3 className="text-sm font-semibold text-slate-700 tracking-wide">Webinar Sequence</h3>
+                      </div>
+                      {wbEnrollment && (() => {
+                        const wDate = new Date(wbEnrollment.webinar_date);
+                        const isPast = wDate < new Date();
+                        return (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isPast ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                            {isPast ? 'Past webinar' : 'Upcoming webinar'} · {wDate.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div className="divide-y divide-slate-50">
-                      {templates.map((tpl) => (
-                        <button
-                          key={tpl.id}
-                          onClick={() => {
-                            navigator.clipboard.writeText(tpl.content).then(() => {
-                              setCopiedTemplateId(tpl.id);
-                              setTimeout(() => setCopiedTemplateId(null), 2000);
-                            });
-                          }}
-                          className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors group flex items-start gap-3"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-slate-700 group-hover:text-blue-700">{tpl.name}</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{tpl.content}</p>
-                          </div>
-                          <span className={`shrink-0 mt-0.5 transition-all ${copiedTemplateId === tpl.id ? 'text-emerald-500' : 'text-slate-300 group-hover:text-blue-400'}`}>
-                            {copiedTemplateId === tpl.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                          </span>
-                        </button>
-                      ))}
+                      {wbMessages.length === 0 ? (
+                        <p className="px-4 py-3 text-xs text-slate-400">No sequence messages scheduled.</p>
+                      ) : (
+                        wbMessages.map((msg: any) => {
+                          const statusColor = msg.status === 'sent' ? 'text-emerald-600 bg-emerald-50' : msg.status === 'failed' ? 'text-red-500 bg-red-50' : msg.status === 'skipped' ? 'text-slate-400 bg-slate-100' : 'text-blue-600 bg-blue-50';
+                          return (
+                            <div key={msg.id} className="px-4 py-2.5 flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-600 line-clamp-2">{msg.message_preview || msg.step_message || '—'}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{new Date(msg.scheduled_at).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                              </div>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${statusColor}`}>{msg.status}</span>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 )}
@@ -1747,6 +1759,8 @@ function ConversationsView({ contacts, selectedId, onUpdateContact }: Conversati
   const [scheduledReminders, setScheduledReminders] = useState<{ id: string; message: string; scheduled_time: string; status: string; }[]>([]);
   const [loadingReminders, setLoadingReminders] = useState(false);
   const [isLive, setIsLive] = useState(true);
+  const [inboxTemplates, setInboxTemplates] = useState<Array<{ id: string; name: string; content: string }>>([]);
+  const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeContact: Contact = contacts.find((c: Contact) => c.id === selectedId) || contacts[0];
@@ -1811,6 +1825,13 @@ function ConversationsView({ contacts, selectedId, onUpdateContact }: Conversati
       .catch(e => console.error(e))
       .finally(() => setLoadingReminders(false));
   }, [activeContact?.id]);
+
+  // Load templates once
+  useEffect(() => {
+    fetch('/api/templates').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setInboxTemplates(data);
+    }).catch(() => {});
+  }, []);
 
   const handleSendLineMessage = async () => {
     if (!activeContact?.lineId || !lineMessageText.trim()) return;
@@ -2073,29 +2094,6 @@ function ConversationsView({ contacts, selectedId, onUpdateContact }: Conversati
                   </div>
                </div>
 
-               {(activeContact.webinar?.link || activeContact.webinar?.dateTime) && (
-                  <div className="space-y-3 p-4 bg-blue-50 rounded-xl border border-blue-100">
-                     <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center">
-                        <Calendar className="w-3.5 h-3.5 mr-1" /> Webinar
-                     </h3>
-                     {activeContact.webinar.dateTime && (
-                        <p className="text-sm font-medium text-blue-900 border-l-2 border-blue-400 pl-2">
-                           {new Date(activeContact.webinar.dateTime).toLocaleDateString([], {weekday: 'short', month: 'long', day: 'numeric', year: 'numeric'})}
-                        </p>
-                     )}
-                     {activeContact.webinar.link && (
-                        <div className="flex gap-2 mt-2">
-                          <button onClick={() => copyToClipboard(activeContact.webinar.link, 'webinar')} className="flex-1 flex items-center justify-center space-x-1.5 text-xs font-bold bg-white border border-blue-200 py-1.5 px-3 rounded-lg text-blue-700 shadow-sm hover:shadow transition-all">
-                            {copiedField === 'webinar' ? <><Check className="w-3.5 h-3.5" /> <span>Copied!</span></> : <><LinkIcon className="w-3.5 h-3.5" /> <span>Copy Link</span></>}
-                          </button>
-                          <a href={activeContact.webinar.link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-all shadow-sm">
-                            Open
-                          </a>
-                        </div>
-                     )}
-                  </div>
-               )}
-
                <div className="space-y-3 border-t border-slate-100 pt-5">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
                      <History className="w-3.5 h-3.5 mr-1" /> Sales Notes
@@ -2110,85 +2108,37 @@ function ConversationsView({ contacts, selectedId, onUpdateContact }: Conversati
                   />
                </div>
 
-               <div className="space-y-3 border-t border-slate-100 pt-5">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
-                     <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Webinar Stats
-                  </h3>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-600">Attended Webinar</span>
-                    <button 
-                      onClick={() => {
-                        const updated = { ...activeContact, attended: !activeContact.attended };
-                        onUpdateContact(updated);
-                        handleUpdateContactField(updated);
-                      }}
-                      className={`w-10 h-5 rounded-full p-0.5 transition-colors ${activeContact.attended ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                    >
-                      <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${activeContact.attended ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-600">Product Purchased</span>
-                    <button 
-                      onClick={() => {
-                        const updated = { ...activeContact, purchased: !activeContact.purchased };
-                        onUpdateContact(updated);
-                        handleUpdateContactField(updated);
-                      }}
-                      className={`w-10 h-5 rounded-full p-0.5 transition-colors ${activeContact.purchased ? 'bg-blue-600' : 'bg-slate-300'}`}
-                    >
-                      <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${activeContact.purchased ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
-               </div>
-
-               {/* Scheduled Messages Block */}
-               <div className="space-y-3 border-t border-slate-100 pt-5">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
-                     <Bell className="w-3.5 h-3.5 mr-1" /> Schedule Message
-                  </h3>
-                  <textarea
-                     value={scheduleMessage}
-                     onChange={e => setScheduleMessage(e.target.value)}
-                     placeholder="Type your scheduled message..."
-                     rows={2}
-                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none resize-none"
-                  />
-                  <input
-                     type="datetime-local"
-                     value={scheduleDateTime}
-                     onChange={e => setScheduleDateTime(e.target.value)}
-                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
-                  {scheduleSuccess && <p className="text-xs text-emerald-600 font-semibold">{scheduleSuccess}</p>}
-                  <button
-                     onClick={handleScheduleMessage}
-                     disabled={!scheduleMessage.trim() || !scheduleDateTime || isScheduling}
-                     className="w-full flex items-center justify-center space-x-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-2 px-3 rounded-lg disabled:opacity-50 transition-colors"
-                  >
-                     {isScheduling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
-                     <span>Schedule Send</span>
-                  </button>
-
-                  {loadingReminders ? (
-                     <p className="text-xs text-slate-400">Loading...</p>
-                  ) : scheduledReminders.filter(r => r.status === 'pending').length > 0 ? (
-                     <div className="space-y-1.5">
-                        <p className="text-[10px] text-slate-400 font-semibold uppercase">Queued</p>
-                        {scheduledReminders.filter(r => r.status === 'pending').map(r => (
-                           <div key={r.id} className="flex items-start justify-between bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
-                              <div className="flex-1 min-w-0 mr-2">
-                                 <p className="text-xs text-slate-700 font-medium truncate">{r.message}</p>
-                                 <p className="text-[10px] text-slate-400">{new Date(r.scheduled_time).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</p>
-                              </div>
-                              <button onClick={() => handleDeleteReminder(r.id)} className="text-red-400 hover:text-red-600 shrink-0">
-                                 <X className="w-3.5 h-3.5" />
-                              </button>
-                           </div>
-                        ))}
-                     </div>
-                  ) : null}
-               </div>
+               {/* Templates quick-copy */}
+               {inboxTemplates.length > 0 && (
+                 <div className="space-y-2 border-t border-slate-100 pt-5">
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                     <span className="flex items-center"><Layout className="w-3.5 h-3.5 mr-1" /> Templates</span>
+                     <span className="text-[10px] font-normal normal-case">Click to copy</span>
+                   </h3>
+                   <div className="space-y-1.5">
+                     {inboxTemplates.map((tpl) => (
+                       <button
+                         key={tpl.id}
+                         onClick={() => {
+                           navigator.clipboard.writeText(tpl.content).then(() => {
+                             setCopiedTemplateId(tpl.id);
+                             setTimeout(() => setCopiedTemplateId(null), 2000);
+                           });
+                         }}
+                         className="w-full text-left px-3 py-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-lg transition-colors group flex items-start gap-2"
+                       >
+                         <div className="flex-1 min-w-0">
+                           <p className="text-xs font-semibold text-slate-700 group-hover:text-blue-700">{tpl.name}</p>
+                           <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2 leading-relaxed">{tpl.content}</p>
+                         </div>
+                         <span className={`shrink-0 mt-0.5 transition-all ${copiedTemplateId === tpl.id ? 'text-emerald-500' : 'text-slate-300 group-hover:text-blue-400'}`}>
+                           {copiedTemplateId === tpl.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                         </span>
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+               )}
             </div>
          </div>
       </aside>
