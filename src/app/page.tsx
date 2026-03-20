@@ -80,6 +80,7 @@ function CRMDashboard() {
   // Filtering state
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTagFilter, setSelectedTagFilter] = useState("All");
+  const [lineOnlyFilter, setLineOnlyFilter] = useState(false);
 
   // Fetch contacts on mount + real-time subscriptions
   useEffect(() => {
@@ -165,8 +166,9 @@ function CRMDashboard() {
       contact.lineId?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesTag = selectedTagFilter === "All" || contact.tags?.includes(selectedTagFilter);
+    const matchesLineOnly = !lineOnlyFilter || (contact.lineId && !contact.email && !contact.ghl_contact_id);
 
-    return matchesSearch && matchesTag;
+    return matchesSearch && matchesTag && matchesLineOnly;
   });
 
   // Deep-link: restore full app state from URL on load/navigation
@@ -381,6 +383,14 @@ function CRMDashboard() {
                 placeholder={`Search ${activeTab}...`}
               />
             </div>
+            {activeTab === 'contacts' && (
+              <button
+                onClick={() => setLineOnlyFilter(f => !f)}
+                className={`w-full text-xs font-bold py-1.5 rounded-lg border transition-all ${lineOnlyFilter ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-orange-500 border-orange-300 hover:bg-orange-50'}`}
+              >
+                {lineOnlyFilter ? '✕ Clear Filter' : '⚠ LINE Only (Unmatched)'}
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">

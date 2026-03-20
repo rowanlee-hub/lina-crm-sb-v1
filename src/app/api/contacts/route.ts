@@ -103,12 +103,37 @@ export async function POST(req: Request) {
       // Fetch existing to compare tags
       const { data: existing } = await supabase
         .from('contacts')
-        .select('tags, line_id, ghl_contact_id')
+        .select('tags, line_id, ghl_contact_id, email')
         .eq('id', contact.id)
         .single();
 
       const oldTags: string[] = existing?.tags || [];
       const newTags: string[] = contact.tags || [];
+
+      // Auto-merge: if this is a LINE-only contact and email was just added,
+      // check if another contact already has that email (GHL contact) and merge them.
+      if (existing?.line_id && !existing?.email && contact.email) {
+        const { data: emailMatch } = await supabase
+          .from('contacts')
+          .select('*')
+          .eq('email', contact.email)
+          .neq('id', contact.id)
+          .single();
+
+        if (emailMatch) {
+          // Merge: move LINE id + tags onto the GHL contact, delete this one
+          const mergedTags = [...new Set([...(emailMatch.tags || []), ...(existing?.tags || [])])];
+          await supabase.from('contacts').update({
+            line_id: existing.line_id,
+            tags: mergedTags,
+            updated_at: new Date().toISOString(),
+          }).eq('id', emailMatch.id);
+          await supabase.from('contact_history').update({ contact_id: emailMatch.id }).eq('contact_id', contact.id);
+          await supabase.from('contact_history').insert({ contact_id: emailMatch.id, action: `Merged [Manual]: LINE ID linked via email match` });
+          await supabase.from('contacts').delete().eq('id', contact.id);
+          return NextResponse.json({ success: true, message: 'Merged with existing GHL contact', id: emailMatch.id });
+        }
+      }
 
       const { data, error } = await supabase
         .from('contacts')
