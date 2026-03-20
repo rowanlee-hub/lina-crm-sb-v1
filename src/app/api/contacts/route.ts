@@ -9,15 +9,19 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const pendingFollowup = searchParams.get('pending_followup') === 'true';
+    const fetchAll = searchParams.get('all') === 'true';
     const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 200);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 2000);
     const offset = (page - 1) * limit;
 
     let query = supabase
       .from('contacts')
       .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('created_at', { ascending: false });
+
+    if (!fetchAll) {
+      query = query.range(offset, offset + limit - 1);
+    }
 
     if (pendingFollowup) {
       query = query.not('follow_up_at', 'is', null).lte('follow_up_at', new Date().toISOString());

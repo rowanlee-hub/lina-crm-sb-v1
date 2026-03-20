@@ -81,6 +81,12 @@ function CRMDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTagFilter, setSelectedTagFilter] = useState("All");
   const [lineOnlyFilter, setLineOnlyFilter] = useState(false);
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string[]>([]);
+  const [filterLine, setFilterLine] = useState<'any' | 'linked' | 'unlinked' | 'none'>('any');
+  const [filterAttended, setFilterAttended] = useState<'any' | 'yes' | 'no'>('any');
+  const [filterPurchased, setFilterPurchased] = useState<'any' | 'yes' | 'no'>('any');
+  const [filterWebinar, setFilterWebinar] = useState<'any' | 'upcoming' | 'past' | 'none'>('any');
   const [sheetMode, setSheetMode] = useState(false);
   const [editingCell, setEditingCell] = useState<{ contactId: string; field: string } | null>(null);
   const [cellDraft, setCellDraft] = useState('');
@@ -130,7 +136,7 @@ function CRMDashboard() {
     setIsLoading(true);
     setFetchError("");
     try {
-      const response = await fetch(CONTACTS_API, { cache: 'no-store' });
+      const response = await fetch(`${CONTACTS_API}?all=true`, { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch data from Supabase backend");
 
       const data: Contact[] = await response.json();
@@ -190,17 +196,56 @@ function CRMDashboard() {
 
   const uniqueTags = ["All", ...getAllUniqueTags(contacts)];
 
+  const activeFilterCount = [
+    filterStatus.length > 0,
+    filterLine !== 'any',
+    filterAttended !== 'any',
+    filterPurchased !== 'any',
+    filterWebinar !== 'any',
+    lineOnlyFilter,
+    selectedTagFilter !== 'All',
+  ].filter(Boolean).length;
+
   // Apply filters
   const filteredContacts = contacts.filter(contact => {
-    const matchesSearch =
-      contact.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.lineId?.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q ||
+      contact.name?.toLowerCase().includes(q) ||
+      contact.email?.toLowerCase().includes(q) ||
+      contact.phone?.toLowerCase().includes(q) ||
+      contact.lineId?.toLowerCase().includes(q) ||
+      contact.tags?.some(t => t.toLowerCase().includes(q));
 
     const matchesTag = selectedTagFilter === "All" || contact.tags?.includes(selectedTagFilter);
     const matchesLineOnly = !lineOnlyFilter || (contact.lineId && !contact.email && !contact.ghl_contact_id);
 
-    return matchesSearch && matchesTag && matchesLineOnly;
+    const matchesStatus = filterStatus.length === 0 || filterStatus.includes(contact.status || 'Lead');
+
+    const matchesLine =
+      filterLine === 'any' ? true :
+      filterLine === 'linked' ? (!!contact.lineId && !!(contact.email || contact.ghl_contact_id)) :
+      filterLine === 'unlinked' ? (!!contact.lineId && !contact.email && !contact.ghl_contact_id) :
+      !contact.lineId;
+
+    const matchesAttended =
+      filterAttended === 'any' ? true :
+      filterAttended === 'yes' ? !!contact.attended :
+      !contact.attended;
+
+    const matchesPurchased =
+      filterPurchased === 'any' ? true :
+      filterPurchased === 'yes' ? !!contact.purchased :
+      !contact.purchased;
+
+    const contactWebinarDate = contact.webinar?.dateTime?.substring(0, 10);
+    const activeDate = activeWebinarDate?.substring(0, 10);
+    const matchesWebinar =
+      filterWebinar === 'any' ? true :
+      filterWebinar === 'upcoming' ? (!!contactWebinarDate && contactWebinarDate === activeDate) :
+      filterWebinar === 'past' ? (!!contactWebinarDate && contactWebinarDate !== activeDate) :
+      !contactWebinarDate;
+
+    return matchesSearch && matchesTag && matchesLineOnly && matchesStatus && matchesLine && matchesAttended && matchesPurchased && matchesWebinar;
   });
 
   // Deep-link: restore full app state from URL on load/navigation
@@ -364,9 +409,18 @@ function CRMDashboard() {
         <main className={`w-full max-w-[360px] bg-white border-r border-slate-200 flex flex-col shrink-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] ${sheetMode && activeTab === 'contacts' ? 'hidden' : ''}`}>
           <div className="p-5 border-b border-slate-100 flex flex-col space-y-4 bg-white/50 backdrop-blur-sm sticky top-0 z-20">
             <div className="flex items-center justify-between">
-              <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                {activeTab === 'inbox' ? 'Conversations' : 'Contacts'}
-              </h1>
+              <div>
+                <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                  {activeTab === 'inbox' ? 'Conversations' : 'Contacts'}
+                </h1>
+                {activeTab === 'contacts' && !isLoading && (
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    {filteredContacts.length !== contacts.length
+                      ? <><span className="text-blue-600 font-bold">{filteredContacts.length}</span> of {contacts.length}</>
+                      : <span className="font-bold">{contacts.length}</span>} contacts
+                  </p>
+                )}
+              </div>
               <div className="flex items-center space-x-2">
                 {activeTab === 'contacts' && (
                   <>
@@ -423,12 +477,96 @@ function CRMDashboard() {
               />
             </div>
             {activeTab === 'contacts' && (
-              <button
-                onClick={() => setLineOnlyFilter(f => !f)}
-                className={`w-full text-xs font-bold py-1.5 rounded-lg border transition-all ${lineOnlyFilter ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-orange-500 border-orange-300 hover:bg-orange-50'}`}
-              >
-                {lineOnlyFilter ? '✕ Clear Filter' : '⚠ LINE Only (Unmatched)'}
-              </button>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowAdvancedFilter(f => !f)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-1.5 rounded-lg border transition-all ${showAdvancedFilter || activeFilterCount > 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    <Filter className="w-3 h-3" />
+                    Filters {activeFilterCount > 0 && <span className="bg-white/30 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
+                  </button>
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={() => { setFilterStatus([]); setFilterLine('any'); setFilterAttended('any'); setFilterPurchased('any'); setFilterWebinar('any'); setLineOnlyFilter(false); setSelectedTagFilter('All'); setSearchQuery(''); }}
+                      className="px-2 py-1.5 text-xs font-bold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-all"
+                    >Clear</button>
+                  )}
+                </div>
+
+                {showAdvancedFilter && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3 text-xs">
+                    {/* Status */}
+                    <div>
+                      <p className="font-bold text-slate-500 uppercase tracking-wider text-[10px] mb-1.5">Status</p>
+                      <div className="flex flex-wrap gap-1">
+                        {['Lead', 'Nurturing', 'Customer', 'Closed'].map(s => (
+                          <button key={s}
+                            onClick={() => setFilterStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${filterStatus.includes(s) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                          >{s}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* LINE */}
+                    <div>
+                      <p className="font-bold text-slate-500 uppercase tracking-wider text-[10px] mb-1.5">LINE Status</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[['any','Any'],['linked','Linked'],['unlinked','LINE Only'],['none','No LINE']] .map(([v, l]) => (
+                          <button key={v}
+                            onClick={() => setFilterLine(v as typeof filterLine)}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${filterLine === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                          >{l}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Webinar */}
+                    <div>
+                      <p className="font-bold text-slate-500 uppercase tracking-wider text-[10px] mb-1.5">Webinar</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[['any','Any'],['upcoming','Upcoming'],['past','Past'],['none','None']] .map(([v, l]) => (
+                          <button key={v}
+                            onClick={() => setFilterWebinar(v as typeof filterWebinar)}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${filterWebinar === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                          >{l}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Attended / Purchased */}
+                    <div className="flex gap-4">
+                      <div>
+                        <p className="font-bold text-slate-500 uppercase tracking-wider text-[10px] mb-1.5">Attended</p>
+                        <div className="flex gap-1">
+                          {[['any','Any'],['yes','Yes'],['no','No']].map(([v,l]) => (
+                            <button key={v}
+                              onClick={() => setFilterAttended(v as typeof filterAttended)}
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${filterAttended === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                            >{l}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-500 uppercase tracking-wider text-[10px] mb-1.5">Purchased</p>
+                        <div className="flex gap-1">
+                          {[['any','Any'],['yes','Yes'],['no','No']].map(([v,l]) => (
+                            <button key={v}
+                              onClick={() => setFilterPurchased(v as typeof filterPurchased)}
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${filterPurchased === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                            >{l}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Tag */}
+                    <div>
+                      <p className="font-bold text-slate-500 uppercase tracking-wider text-[10px] mb-1.5">Tag</p>
+                      <select value={selectedTagFilter} onChange={e => setSelectedTagFilter(e.target.value)} className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-300">
+                        {uniqueTags.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
