@@ -1617,9 +1617,14 @@ function ConversationsView({ contacts, selectedId, onUpdateContact }: Conversati
                         </p>
                      )}
                      {activeContact.webinar.link && (
-                        <button onClick={() => copyToClipboard(activeContact.webinar.link, 'webinar')} className="w-full mt-2 flex items-center justify-center space-x-1.5 text-xs font-bold bg-white border border-blue-200 py-1.5 px-3 rounded-lg text-blue-700 shadow-sm hover:shadow transition-all">
-                          {copiedField === 'webinar' ? <><Check className="w-3.5 h-3.5" /> <span>Link Copied!</span></> : <><LinkIcon className="w-3.5 h-3.5" /> <span>Copy Link</span></>}
-                        </button>
+                        <div className="flex gap-2 mt-2">
+                          <button onClick={() => copyToClipboard(activeContact.webinar.link, 'webinar')} className="flex-1 flex items-center justify-center space-x-1.5 text-xs font-bold bg-white border border-blue-200 py-1.5 px-3 rounded-lg text-blue-700 shadow-sm hover:shadow transition-all">
+                            {copiedField === 'webinar' ? <><Check className="w-3.5 h-3.5" /> <span>Copied!</span></> : <><LinkIcon className="w-3.5 h-3.5" /> <span>Copy Link</span></>}
+                          </button>
+                          <a href={activeContact.webinar.link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-all shadow-sm">
+                            Open
+                          </a>
+                        </div>
                      )}
                   </div>
                )}
