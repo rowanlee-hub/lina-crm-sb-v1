@@ -1600,6 +1600,12 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                         {webinarDateOptions.map(opt => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
+                        {/* Show current date as option if it doesn't match upcoming/previous */}
+                        {contact.webinar.dateTime && !webinarDateOptions.some(opt => opt.value === contact.webinar.dateTime.substring(0, 10)) && (() => {
+                          const d = new Date(contact.webinar.dateTime);
+                          const label = `Current — ${d.toLocaleDateString('en-MY', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}`;
+                          return <option value={contact.webinar.dateTime.substring(0, 10)}>{label}</option>;
+                        })()}
                       </select>
                     </div>
                   </div>
