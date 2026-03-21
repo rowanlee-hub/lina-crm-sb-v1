@@ -359,17 +359,26 @@ export async function processWorkflowTriggers(
   if (!workflows || workflows.length === 0) return;
 
   const matched: string[] = [];
+  const inputLower = triggerValue.toLowerCase().trim();
+
   for (const wf of workflows) {
-    // Check legacy single trigger
-    if (wf.trigger_type === triggerType && wf.trigger_value === triggerValue) {
-      matched.push(wf.id);
-      continue;
-    }
-    // Check multi-trigger array
-    const extraTriggers: { type: string; value: string }[] = wf.triggers || [];
-    if (extraTriggers.some(t => t.type === triggerType && t.value === triggerValue)) {
-      matched.push(wf.id);
-    }
+    // Collect all triggers (primary + extras)
+    const allTriggers = [
+      { type: wf.trigger_type, value: wf.trigger_value },
+      ...((wf.triggers || []) as { type: string; value: string }[]),
+    ];
+
+    const isMatch = allTriggers.some(t => {
+      if (t.type !== triggerType) return false;
+      if (triggerType === 'KEYWORD_RECEIVED') {
+        // Keyword: exact match, case-insensitive
+        return t.value && inputLower === t.value.toLowerCase().trim();
+      }
+      // All other triggers: exact match
+      return t.value === triggerValue;
+    });
+
+    if (isMatch) matched.push(wf.id);
   }
 
   for (const id of matched) {

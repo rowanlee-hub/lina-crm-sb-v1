@@ -12,12 +12,31 @@ export async function processAutomations(
   console.log(`[AutomationEngine] Processing ${triggerType} for "${triggerValue}" (Contact: ${contactId})`);
 
   // ─── PART 1: Simple IFTTT Automations ───────────────────────
-  const { data: automations, error } = await supabase
-    .from('automations')
-    .select('*')
-    .eq('trigger_type', triggerType)
-    .eq('trigger_value', triggerValue)
-    .eq('is_active', true);
+  let automations: any[] | null = null;
+  let error: any = null;
+
+  if (triggerType === 'KEYWORD_RECEIVED') {
+    // For keywords, fetch all keyword rules and match exact (case-insensitive)
+    const result = await supabase
+      .from('automations')
+      .select('*')
+      .eq('trigger_type', 'KEYWORD_RECEIVED')
+      .eq('is_active', true);
+    error = result.error;
+    const inputLower = triggerValue.toLowerCase().trim();
+    automations = (result.data || []).filter(
+      (a: any) => a.trigger_value && inputLower === a.trigger_value.toLowerCase().trim()
+    );
+  } else {
+    const result = await supabase
+      .from('automations')
+      .select('*')
+      .eq('trigger_type', triggerType)
+      .eq('trigger_value', triggerValue)
+      .eq('is_active', true);
+    error = result.error;
+    automations = result.data;
+  }
 
   if (error) {
     console.error(`[AutomationEngine] Error fetching automations:`, error);
