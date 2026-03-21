@@ -155,6 +155,59 @@ async function evaluateCondition(step: any, contact: any): Promise<boolean> {
 }
 
 /**
+ * Evaluate a single filter rule against a contact (reuses operator logic from evaluateCondition)
+ */
+function evaluateRule(rule: { field: string; operator: string; value: string }, contact: any): boolean {
+  const field = rule.field;
+  const operator = rule.operator || '==';
+  const target = rule.value || '';
+
+  // Special computed field
+  if (field === 'webinar_upcoming') {
+    const webinarDate = contact.webinar_date;
+    const webinarLink = contact.webinar_link;
+    if (!webinarDate || !webinarLink) return false;
+    const today = new Date().toISOString().substring(0, 10);
+    return String(webinarDate).substring(0, 10) >= today;
+  }
+
+  let val: any;
+  if (field === 'tags') { val = contact.tags || []; } else { val = contact[field]; }
+
+  const valStr = val == null ? '' : String(val).toLowerCase();
+  const targetStr = target.toLowerCase();
+
+  switch (operator) {
+    case 'exists': return Array.isArray(val) ? val.length > 0 : val != null && val !== '' && val !== false;
+    case 'not_exists': return Array.isArray(val) ? val.length === 0 : val == null || val === '' || val === false;
+    case '==': case 'equals': if (target === 'true') return val === true; if (target === 'false') return val === false; return valStr === targetStr;
+    case '!=': case 'not_equals': return valStr !== targetStr;
+    case 'contains': if (Array.isArray(val)) return val.some((v: string) => String(v).toLowerCase().includes(targetStr)); return valStr.includes(targetStr);
+    case 'not_contains': if (Array.isArray(val)) return !val.some((v: string) => String(v).toLowerCase().includes(targetStr)); return !valStr.includes(targetStr);
+    case 'starts_with': return valStr.startsWith(targetStr);
+    case 'ends_with': return valStr.endsWith(targetStr);
+    case '>': return Number(val) > Number(target);
+    case '<': return Number(val) < Number(target);
+    case 'has_tag': return (contact.tags || []).some((t: string) => t.toLowerCase() === targetStr);
+    case 'not_has_tag': return !(contact.tags || []).some((t: string) => t.toLowerCase() === targetStr);
+    default: return valStr === targetStr;
+  }
+}
+
+/**
+ * Evaluate a multi-rule filter config against a contact
+ * filter_config: { rules: [{ field, operator, value }], logic: 'AND' | 'OR' }
+ */
+function evaluateFilter(filterConfig: any, contact: any): boolean {
+  if (!filterConfig || !filterConfig.rules || filterConfig.rules.length === 0) return true; // No filter = pass
+  const logic = filterConfig.logic || 'AND';
+  if (logic === 'OR') {
+    return filterConfig.rules.some((rule: any) => evaluateRule(rule, contact));
+  }
+  return filterConfig.rules.every((rule: any) => evaluateRule(rule, contact));
+}
+
+/**
  * Executes a single workflow node for a contact enrollment
  */
 export async function executeWorkflowNode(
@@ -185,7 +238,44 @@ export async function executeWorkflowNode(
       .single();
     
     if (nextStep) await executeWorkflowNode(enrollmentId, nextStep.id);
-    return; // Exit current execution branch
+    return;
+  }
+
+  if (step.node_type === 'ROUTER') {
+    const mode = step.router_config?.mode || 'first_match';
+    const { data: branches } = await supabase
+      .from('workflow_steps')
+      .select('*')
+      .eq('parent_id', step.id)
+      .order('step_order', { ascending: true });
+
+    if (!branches || branches.length === 0) return;
+
+    const matched: any[] = [];
+    let fallbackBranch: any = null;
+
+    for (const branch of branches) {
+      if (branch.branch_type === 'FALLBACK') {
+        fallbackBranch = branch;
+        continue;
+      }
+      const passes = evaluateFilter(branch.filter_config, contact);
+      console.log(`[WorkflowEngine] Router branch ${branch.branch_type}: filter ${passes ? 'PASS' : 'FAIL'}`);
+      if (passes) {
+        matched.push(branch);
+        if (mode === 'first_match') break;
+      }
+    }
+
+    if (matched.length === 0 && fallbackBranch) {
+      console.log(`[WorkflowEngine] Router: no branch matched, using FALLBACK`);
+      matched.push(fallbackBranch);
+    }
+
+    for (const branch of matched) {
+      await executeWorkflowNode(enrollmentId, branch.id);
+    }
+    return;
   }
 
   if (step.node_type === 'WAIT') {

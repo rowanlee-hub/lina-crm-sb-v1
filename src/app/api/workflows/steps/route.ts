@@ -69,6 +69,8 @@ export async function POST(req: Request) {
     if (body.wait_config) insertPayload.wait_config = body.wait_config;
     if (body.condition_config) insertPayload.condition_config = body.condition_config;
     if (body.schedule_config) insertPayload.schedule_config = body.schedule_config;
+    if (body.router_config) insertPayload.router_config = body.router_config;
+    if (body.filter_config) insertPayload.filter_config = body.filter_config;
 
     console.log('POST /api/workflows/steps payload:', JSON.stringify(insertPayload));
 
@@ -94,7 +96,7 @@ export async function PATCH(req: Request) {
       'parent_id', 'branch_type', 'node_type', 'step_order',
       'day_of_week', 'send_time', 'action_type', 'message_template',
       'action_value', 'wait_config', 'condition_config', 'schedule_config',
-      'position_x', 'position_y',
+      'router_config', 'filter_config', 'position_x', 'position_y',
     ];
 
     const updates: Record<string, unknown> = {};

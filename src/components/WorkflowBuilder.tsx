@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  X, Plus, MessageCircle, Filter, Clock,
+  X, Plus, MessageCircle, Filter, Clock, GitMerge,
   Trash2, Save, Check, Zap, Edit2,
   ChevronDown, ArrowDown, Activity, RefreshCw,
   CheckCircle2, XCircle, Clock3, AlertCircle,
@@ -31,8 +31,8 @@ export interface Step {
   id: string;
   workflow_id: string;
   parent_id?: string | null;
-  branch_type?: 'YES' | 'NO' | 'DEFAULT';
-  node_type: 'ACTION' | 'CONDITION' | 'WAIT' | 'START';
+  branch_type?: string;
+  node_type: 'ACTION' | 'CONDITION' | 'WAIT' | 'START' | 'ROUTER';
   step_order: number;
   action_type?: string;
   message_template?: string;
@@ -40,6 +40,8 @@ export interface Step {
   wait_config?: { amount: number; unit: string };
   condition_config?: { field: string; operator: string; value: string };
   schedule_config?: { scheduled_at: string };
+  router_config?: { mode: 'first_match' | 'all_match' };
+  filter_config?: { rules: { field: string; operator: string; value: string }[]; logic: 'AND' | 'OR' };
   day_of_week?: number;
   send_time?: string;
 }
@@ -107,10 +109,11 @@ function StepCard({ step, onClick, onDelete }: { step: Step; onClick: () => void
   const isAction = step.node_type === 'ACTION' || !step.node_type;
   const isCondition = step.node_type === 'CONDITION';
   const isWait = step.node_type === 'WAIT';
+  const isRouter = step.node_type === 'ROUTER';
 
-  const iconBg = isCondition ? 'bg-amber-100' : isWait ? 'bg-indigo-100' : 'bg-blue-100';
-  const iconColor = isCondition ? 'text-amber-600' : isWait ? 'text-indigo-600' : 'text-blue-600';
-  const borderColor = isCondition ? 'border-amber-200 hover:border-amber-300' : isWait ? 'border-indigo-200 hover:border-indigo-300' : 'border-blue-200 hover:border-blue-300';
+  const iconBg = isRouter ? 'bg-purple-100' : isCondition ? 'bg-amber-100' : isWait ? 'bg-indigo-100' : 'bg-blue-100';
+  const iconColor = isRouter ? 'text-purple-600' : isCondition ? 'text-amber-600' : isWait ? 'text-indigo-600' : 'text-blue-600';
+  const borderColor = isRouter ? 'border-purple-200 hover:border-purple-300' : isCondition ? 'border-amber-200 hover:border-amber-300' : isWait ? 'border-indigo-200 hover:border-indigo-300' : 'border-blue-200 hover:border-blue-300';
 
   let title = '';
   let subtitle = '';
@@ -145,9 +148,12 @@ function StepCard({ step, onClick, onDelete }: { step: Step; onClick: () => void
   } else if (isWait) {
     title = 'Wait';
     subtitle = `${step.wait_config?.amount || 1} ${step.wait_config?.unit || 'days'}`;
+  } else if (isRouter) {
+    title = 'Router';
+    subtitle = step.router_config?.mode === 'all_match' ? 'All matching branches' : 'First matching branch';
   }
 
-  const Icon = isCondition ? Filter : isWait ? Clock : MessageCircle;
+  const Icon = isRouter ? GitMerge : isCondition ? Filter : isWait ? Clock : MessageCircle;
 
   return (
     <div
@@ -259,6 +265,7 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
   const [condVal, setCondVal] = useState('true');
   const [scheduleAt, setScheduleAt] = useState('');
   const [targetWorkflowId, setTargetWorkflowId] = useState('');
+  const [routerMode, setRouterMode] = useState<'first_match' | 'all_match'>('first_match');
   const [allWorkflows, setAllWorkflows] = useState<{ id: string; name: string }[]>([]);
 
   // Load other workflows for enroll/remove dropdown
@@ -304,11 +311,12 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
     setCondVal('true');
     setScheduleAt('');
     setTargetWorkflowId('');
+    setRouterMode('first_match');
   }
 
   function openEditForm(step: Step) {
     setEditingStep(step);
-    setStepNodeType(step.node_type as 'ACTION' | 'CONDITION' | 'WAIT');
+    setStepNodeType(step.node_type as 'ACTION' | 'CONDITION' | 'WAIT' | 'ROUTER');
     setStepAction(step.action_type || 'SEND_MESSAGE');
     setStepMessage(step.message_template || '');
     setStepTagVal(step.action_value || '');
@@ -326,6 +334,9 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
     }
     if (step.action_type === 'ENROLL_WORKFLOW' || step.action_type === 'REMOVE_FROM_WORKFLOW') {
       setTargetWorkflowId(step.action_value || '');
+    }
+    if (step.router_config) {
+      setRouterMode(step.router_config.mode || 'first_match');
     }
     setShowStepForm(true);
   }
@@ -376,6 +387,8 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
       payload.wait_config = { amount: waitAmount, unit: waitUnit };
     } else if (stepNodeType === 'CONDITION') {
       payload.condition_config = { field: condField, operator: condOp, value: condVal };
+    } else if (stepNodeType === 'ROUTER') {
+      payload.router_config = { mode: routerMode };
     }
 
     try {
@@ -568,15 +581,26 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
               children.sort((a, b) => a.step_order - b.step_order);
             }
 
+            const BRANCH_COLORS = [
+              { bg: 'bg-blue-50/30', border: 'border-blue-200', line: 'bg-blue-300', text: 'text-blue-600', pill: 'bg-blue-50 border-blue-200', btn: 'border-blue-300 text-blue-400 hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50' },
+              { bg: 'bg-emerald-50/30', border: 'border-emerald-200', line: 'bg-emerald-300', text: 'text-emerald-600', pill: 'bg-emerald-50 border-emerald-200', btn: 'border-emerald-300 text-emerald-400 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50' },
+              { bg: 'bg-amber-50/30', border: 'border-amber-200', line: 'bg-amber-300', text: 'text-amber-600', pill: 'bg-amber-50 border-amber-200', btn: 'border-amber-300 text-amber-400 hover:border-amber-500 hover:text-amber-600 hover:bg-amber-50' },
+              { bg: 'bg-rose-50/30', border: 'border-rose-200', line: 'bg-rose-300', text: 'text-rose-600', pill: 'bg-rose-50 border-rose-200', btn: 'border-rose-300 text-rose-400 hover:border-rose-500 hover:text-rose-600 hover:bg-rose-50' },
+              { bg: 'bg-cyan-50/30', border: 'border-cyan-200', line: 'bg-cyan-300', text: 'text-cyan-600', pill: 'bg-cyan-50 border-cyan-200', btn: 'border-cyan-300 text-cyan-400 hover:border-cyan-500 hover:text-cyan-600 hover:bg-cyan-50' },
+            ];
+            const FALLBACK_COLOR = { bg: 'bg-slate-50/30', border: 'border-slate-300', line: 'bg-slate-300', text: 'text-slate-500', pill: 'bg-slate-100 border-slate-300', btn: 'border-slate-300 text-slate-400 hover:border-slate-500 hover:text-slate-600 hover:bg-slate-50' };
+
+            function filterSummary(fc: Step['filter_config']): string {
+              if (!fc || !fc.rules || fc.rules.length === 0) return 'No filter';
+              return fc.rules.map(r => `${r.field} ${r.operator} ${r.value || ''}`).join(` ${fc.logic || 'AND'} `);
+            }
+
             function renderBranch(parentId: string | null): React.ReactNode {
               const children = childMap.get(parentId) || [];
               if (children.length === 0) return null;
               return children.map((step) => {
                 const isCondition = step.node_type === 'CONDITION';
-                const yesChildren = childMap.get(step.id)?.filter((c) => c.branch_type === 'YES') || [];
-                const noChildren = childMap.get(step.id)?.filter((c) => c.branch_type === 'NO') || [];
-                const defaultChildren = childMap.get(step.id)?.filter((c) => !c.branch_type || c.branch_type === 'DEFAULT') || [];
-                const hasBranches = isCondition && (yesChildren.length > 0 || noChildren.length > 0);
+                const isRouter = step.node_type === 'ROUTER';
 
                 return (
                   <div key={step.id}>
@@ -587,72 +611,149 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                     />
 
                     {/* Condition → split into YES / NO columns */}
-                    {isCondition && (
-                      <div className="mt-1">
-                        <div className="flex items-start gap-3">
-                          {/* YES branch */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-col items-center">
-                              <div className="w-0.5 h-4 bg-emerald-300" />
-                              <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 uppercase tracking-widest">YES</span>
-                              <div className="w-0.5 h-4 bg-emerald-300" />
+                    {isCondition && (() => {
+                      const yesChildren = childMap.get(step.id)?.filter((c) => c.branch_type === 'YES') || [];
+                      const noChildren = childMap.get(step.id)?.filter((c) => c.branch_type === 'NO') || [];
+                      return (
+                        <div className="mt-1">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-col items-center">
+                                <div className="w-0.5 h-4 bg-emerald-300" />
+                                <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 uppercase tracking-widest">YES</span>
+                                <div className="w-0.5 h-4 bg-emerald-300" />
+                              </div>
+                              <div className="border-2 border-emerald-200 rounded-2xl p-3 bg-emerald-50/30">
+                                {yesChildren.map((child) => (
+                                  <div key={child.id}>
+                                    <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
+                                    {renderBranch(child.id)}
+                                    <AddStepButton onClick={() => { setNewBranchType('YES'); openAddForm(step.id); }} />
+                                  </div>
+                                ))}
+                                {yesChildren.length === 0 && (
+                                  <div className="flex flex-col items-center py-4">
+                                    <button onClick={() => { setNewBranchType('YES'); openAddForm(step.id); }} className="w-8 h-8 rounded-full border-2 border-dashed border-emerald-300 flex items-center justify-center text-emerald-400 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all"><Plus className="w-4 h-4" /></button>
+                                    <p className="text-[10px] text-emerald-400 mt-1">Add step</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <div className="border-2 border-emerald-200 rounded-2xl p-3 bg-emerald-50/30 space-y-0">
-                              {yesChildren.map((child) => (
-                                <div key={child.id}>
-                                  <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
-                                  {renderBranch(child.id)}
-                                  <AddStepButton onClick={() => { setNewBranchType('YES'); openAddForm(step.id); }} />
-                                </div>
-                              ))}
-                              {yesChildren.length === 0 && (
-                                <div className="flex flex-col items-center py-4">
-                                  <button
-                                    onClick={() => { setNewBranchType('YES'); openAddForm(step.id); }}
-                                    className="w-8 h-8 rounded-full border-2 border-dashed border-emerald-300 flex items-center justify-center text-emerald-400 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                  </button>
-                                  <p className="text-[10px] text-emerald-400 mt-1">Add step</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* NO branch */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-col items-center">
-                              <div className="w-0.5 h-4 bg-red-300" />
-                              <span className="text-[9px] font-black text-red-600 bg-red-50 border border-red-200 rounded-full px-3 py-1 uppercase tracking-widest">NO</span>
-                              <div className="w-0.5 h-4 bg-red-300" />
-                            </div>
-                            <div className="border-2 border-red-200 rounded-2xl p-3 bg-red-50/30 space-y-0">
-                              {noChildren.map((child) => (
-                                <div key={child.id}>
-                                  <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
-                                  {renderBranch(child.id)}
-                                  <AddStepButton onClick={() => { setNewBranchType('NO'); openAddForm(step.id); }} />
-                                </div>
-                              ))}
-                              {noChildren.length === 0 && (
-                                <div className="flex flex-col items-center py-4">
-                                  <button
-                                    onClick={() => { setNewBranchType('NO'); openAddForm(step.id); }}
-                                    className="w-8 h-8 rounded-full border-2 border-dashed border-red-300 flex items-center justify-center text-red-400 hover:border-red-500 hover:text-red-600 hover:bg-red-50 transition-all"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                  </button>
-                                  <p className="text-[10px] text-red-400 mt-1">Add step</p>
-                                </div>
-                              )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-col items-center">
+                                <div className="w-0.5 h-4 bg-red-300" />
+                                <span className="text-[9px] font-black text-red-600 bg-red-50 border border-red-200 rounded-full px-3 py-1 uppercase tracking-widest">NO</span>
+                                <div className="w-0.5 h-4 bg-red-300" />
+                              </div>
+                              <div className="border-2 border-red-200 rounded-2xl p-3 bg-red-50/30">
+                                {noChildren.map((child) => (
+                                  <div key={child.id}>
+                                    <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
+                                    {renderBranch(child.id)}
+                                    <AddStepButton onClick={() => { setNewBranchType('NO'); openAddForm(step.id); }} />
+                                  </div>
+                                ))}
+                                {noChildren.length === 0 && (
+                                  <div className="flex flex-col items-center py-4">
+                                    <button onClick={() => { setNewBranchType('NO'); openAddForm(step.id); }} className="w-8 h-8 rounded-full border-2 border-dashed border-red-300 flex items-center justify-center text-red-400 hover:border-red-500 hover:text-red-600 hover:bg-red-50 transition-all"><Plus className="w-4 h-4" /></button>
+                                    <p className="text-[10px] text-red-400 mt-1">Add step</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
-                    {/* Non-condition → add button then render default children inline */}
-                    {!isCondition && (
+                    {/* Router → N dynamic branch columns */}
+                    {isRouter && (() => {
+                      const allChildren = childMap.get(step.id) || [];
+                      const branchChildren = allChildren.filter(c => c.branch_type?.startsWith('BRANCH_')).sort((a, b) => a.step_order - b.step_order);
+                      const fallbackChildren = allChildren.filter(c => c.branch_type === 'FALLBACK');
+                      // Group by branch_type
+                      const branchTypes = [...new Set(branchChildren.map(c => c.branch_type!))];
+                      const nextBranchIdx = branchTypes.length;
+
+                      return (
+                        <div className="mt-1">
+                          <div className="flex items-start gap-2 overflow-x-auto">
+                            {/* Numbered branches */}
+                            {branchTypes.map((bt, idx) => {
+                              const color = BRANCH_COLORS[idx % BRANCH_COLORS.length];
+                              const stepsInBranch = branchChildren.filter(c => c.branch_type === bt);
+                              const branchLabel = `Branch ${idx + 1}`;
+                              const firstStep = stepsInBranch[0];
+                              const summary = firstStep?.filter_config ? filterSummary(firstStep.filter_config) : 'No filter';
+                              return (
+                                <div key={bt} className="flex-1 min-w-[140px]">
+                                  <div className="flex flex-col items-center">
+                                    <div className={`w-0.5 h-4 ${color.line}`} />
+                                    <span className={`text-[9px] font-black ${color.text} ${color.pill} border rounded-full px-3 py-1 uppercase tracking-widest whitespace-nowrap`}>{branchLabel}</span>
+                                    <p className="text-[8px] text-slate-400 mt-0.5 truncate max-w-full px-1">{summary}</p>
+                                    <div className={`w-0.5 h-3 ${color.line}`} />
+                                  </div>
+                                  <div className={`border-2 ${color.border} rounded-2xl p-3 ${color.bg}`}>
+                                    {stepsInBranch.map((child) => (
+                                      <div key={child.id}>
+                                        <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
+                                        {renderBranch(child.id)}
+                                        <AddStepButton onClick={() => { setNewBranchType(bt); openAddForm(step.id); }} />
+                                      </div>
+                                    ))}
+                                    {stepsInBranch.length === 0 && (
+                                      <div className="flex flex-col items-center py-4">
+                                        <button onClick={() => { setNewBranchType(bt); openAddForm(step.id); }} className={`w-8 h-8 rounded-full border-2 border-dashed ${color.btn} flex items-center justify-center transition-all`}><Plus className="w-4 h-4" /></button>
+                                        <p className={`text-[10px] ${color.text} mt-1`}>Add step</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Fallback branch */}
+                            <div className="flex-1 min-w-[140px]">
+                              <div className="flex flex-col items-center">
+                                <div className={`w-0.5 h-4 ${FALLBACK_COLOR.line}`} />
+                                <span className={`text-[9px] font-black ${FALLBACK_COLOR.text} ${FALLBACK_COLOR.pill} border rounded-full px-3 py-1 uppercase tracking-widest`}>Fallback</span>
+                                <p className="text-[8px] text-slate-400 mt-0.5">If no branch matches</p>
+                                <div className={`w-0.5 h-3 ${FALLBACK_COLOR.line}`} />
+                              </div>
+                              <div className={`border-2 ${FALLBACK_COLOR.border} rounded-2xl p-3 ${FALLBACK_COLOR.bg}`}>
+                                {fallbackChildren.map((child) => (
+                                  <div key={child.id}>
+                                    <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
+                                    {renderBranch(child.id)}
+                                    <AddStepButton onClick={() => { setNewBranchType('FALLBACK'); openAddForm(step.id); }} />
+                                  </div>
+                                ))}
+                                {fallbackChildren.length === 0 && (
+                                  <div className="flex flex-col items-center py-4">
+                                    <button onClick={() => { setNewBranchType('FALLBACK'); openAddForm(step.id); }} className={`w-8 h-8 rounded-full border-2 border-dashed ${FALLBACK_COLOR.btn} flex items-center justify-center transition-all`}><Plus className="w-4 h-4" /></button>
+                                    <p className={`text-[10px] ${FALLBACK_COLOR.text} mt-1`}>Add step</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Add new branch button */}
+                          <div className="flex justify-center mt-2">
+                            <button
+                              onClick={() => { setNewBranchType(`BRANCH_${nextBranchIdx}`); openAddForm(step.id); }}
+                              className="px-4 py-2 border-2 border-dashed border-purple-300 rounded-xl text-xs font-bold text-purple-400 hover:border-purple-500 hover:text-purple-600 hover:bg-purple-50 transition-all flex items-center gap-1.5"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Add Branch
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Non-condition, non-router → add button then render default children inline */}
+                    {!isCondition && !isRouter && (
                       <>
                         <AddStepButton onClick={() => openAddForm(step.id)} />
                         {renderBranch(step.id)}
@@ -926,10 +1027,11 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
             <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
               {/* Node Type Selector */}
               {!editingStep && (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   {([
                     { id: 'ACTION', icon: MessageCircle, label: 'Action', color: 'blue' },
                     { id: 'CONDITION', icon: Filter, label: 'If / Else', color: 'amber' },
+                    { id: 'ROUTER', icon: GitMerge, label: 'Router', color: 'purple' },
                     { id: 'WAIT', icon: Clock, label: 'Wait', color: 'indigo' },
                   ] as const).map((type) => (
                     <button
@@ -982,6 +1084,16 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                       NO Path
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Router branch info */}
+              {!editingStep && steps.find((s) => s.id === newParentId)?.node_type === 'ROUTER' && (
+                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
+                  <p className="text-xs font-bold text-purple-700">
+                    Adding to: <span className="uppercase">{newBranchType === 'FALLBACK' ? 'Fallback' : newBranchType?.replace('_', ' ')}</span>
+                  </p>
+                  <p className="text-[10px] text-purple-500 mt-1">This step will be added to the selected router branch.</p>
                 </div>
               )}
 
@@ -1209,6 +1321,31 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                   </div>
                 );
               })()}
+
+              {/* ROUTER Config */}
+              {stepNodeType === 'ROUTER' && (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-400 italic">Router evaluates branch filters in order. Add branches after creating the router.</p>
+                  <div className="p-4 bg-purple-50 rounded-2xl border border-purple-200 space-y-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Mode</label>
+                      <select
+                        value={routerMode}
+                        onChange={(e) => setRouterMode(e.target.value as 'first_match' | 'all_match')}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                      >
+                        <option value="first_match">First Match — stops at first passing branch</option>
+                        <option value="all_match">All Match — runs every passing branch</option>
+                      </select>
+                    </div>
+                    <div className="p-3 bg-white rounded-xl text-xs text-purple-700">
+                      <strong>First Match:</strong> evaluates branches top-to-bottom, first passing filter wins.<br />
+                      <strong>All Match:</strong> every branch whose filter passes will execute.<br />
+                      <strong>Fallback:</strong> runs only if no other branch matches.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Save / Delete buttons */}
               <div className="pt-4 space-y-3">
