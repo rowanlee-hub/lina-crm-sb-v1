@@ -2619,6 +2619,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   };
 
   const deleteWorkflow = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this workflow? This cannot be undone.')) return;
     await fetch(`/api/workflows?id=${id}`, { method: 'DELETE' });
     setWorkflows(prev => prev.filter(w => w.id !== id));
     if (selectedWf?.id === id) { setSelectedWf(null); setSteps([]); }
@@ -2640,6 +2641,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   };
 
   const deleteRule = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this automation rule? This cannot be undone.')) return;
     await fetch(`/api/automations?id=${id}`, { method: 'DELETE' });
     setAutomations(prev => prev.filter(a => a.id !== id));
   };

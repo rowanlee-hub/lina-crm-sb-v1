@@ -326,6 +326,7 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
   // ─── Delete step ────────────────────────────────────────────────
 
   const deleteStep = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this node? This cannot be undone.')) return;
     await fetch(`/api/workflows/steps?id=${id}`, { method: 'DELETE' });
     setSteps((prev) => prev.filter((s) => s.id !== id));
     if (editingStep?.id === id) {
