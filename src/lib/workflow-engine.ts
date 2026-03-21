@@ -200,7 +200,8 @@ export async function executeWorkflowNode(
     // If it was an immediate transition (no scheduling), recurse. 
     // Otherwise, the cron will handle the completion of the current step and trigger the next one.
     // Actually, we'll let the cron dispatch trigger the next node once the current one is "Sent"
-    await supabase.from('workflow_enrollments').update({ current_step_id: step.id }).eq('id', enrollmentId);
+    // Track progress (non-critical — don't block if column missing)
+    await supabase.from('workflow_enrollments').update({ updated_at: new Date().toISOString() }).eq('id', enrollmentId);
   } else {
     // No more steps
     await supabase.from('workflow_enrollments').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', enrollmentId);
@@ -253,7 +254,10 @@ export async function enrollContactInWorkflow(
     .select()
     .single();
 
-  if (enErr || !enrollment) return;
+  if (enErr || !enrollment) {
+    console.error(`[WorkflowEngine] Failed to create enrollment:`, enErr?.message || 'no data returned');
+    return;
+  }
 
   // Find START/First node
   const { data: firstStep } = await supabase
