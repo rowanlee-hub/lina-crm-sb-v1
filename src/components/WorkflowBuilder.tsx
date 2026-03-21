@@ -19,6 +19,7 @@ import '@xyflow/react/dist/style.css';
 import {
   X, Plus, MessageCircle, Filter, Clock, List, Layout,
   Trash2, Calendar, TagIcon, UserPlus, UserMinus, Send,
+  Save, Check, Zap, Edit2,
 } from 'lucide-react';
 
 import { TriggerNode, ActionNode, WaitNode, ConditionNode } from './workflow-nodes';
@@ -73,6 +74,27 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
   const [steps, setSteps] = useState<Step[]>(initialSteps);
   const [viewMode, setViewMode] = useState<'canvas' | 'list'>('canvas');
 
+  // Workflow-level editable state
+  const [wfName, setWfName] = useState(workflow.name);
+  const [wfTriggerType, setWfTriggerType] = useState(workflow.trigger_type);
+  const [wfTriggerValue, setWfTriggerValue] = useState(workflow.trigger_value || '');
+  const [wfIsActive, setWfIsActive] = useState(workflow.is_active);
+  const [savingWf, setSavingWf] = useState(false);
+  const [savedWf, setSavedWf] = useState(false);
+
+  // Track unsaved changes
+  const isDirty =
+    wfName !== workflow.name ||
+    wfTriggerType !== workflow.trigger_type ||
+    wfTriggerValue !== (workflow.trigger_value || '') ||
+    wfIsActive !== workflow.is_active;
+
+  // Unsaved changes confirm dialog
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+
+  // Trigger edit panel
+  const [showTriggerForm, setShowTriggerForm] = useState(false);
+
   // Step form state
   const [showStepForm, setShowStepForm] = useState(false);
   const [editingStep, setEditingStep] = useState<Step | null>(null);
@@ -92,8 +114,13 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
   const [allWorkflows, setAllWorkflows] = useState<{ id: string; name: string }[]>([]);
 
   // React Flow state
+  const wfForCanvas = useMemo(
+    () => ({ ...workflow, name: wfName, trigger_type: wfTriggerType, trigger_value: wfTriggerValue }),
+    [workflow, wfName, wfTriggerType, wfTriggerValue]
+  );
+
   const { nodes: initNodes, edges: initEdges } = useMemo(
-    () => stepsToNodesAndEdges(steps, workflow),
+    () => stepsToNodesAndEdges(steps, wfForCanvas),
     // Only compute on mount — we manage nodes/edges via state after that
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
@@ -104,12 +131,12 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
   // Debounced position save
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Recompute nodes/edges when steps change
+  // Recompute nodes/edges when steps or workflow metadata change
   useEffect(() => {
-    const { nodes: newNodes, edges: newEdges } = stepsToNodesAndEdges(steps, workflow);
+    const { nodes: newNodes, edges: newEdges } = stepsToNodesAndEdges(steps, wfForCanvas);
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [steps, workflow, setNodes, setEdges]);
+  }, [steps, wfForCanvas, setNodes, setEdges]);
 
   // Load all workflows for enroll/remove dropdown
   useEffect(() => {
@@ -149,7 +176,10 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
 
   const handleNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
-      if (node.id === 'trigger') return;
+      if (node.id === 'trigger') {
+        setShowTriggerForm(true);
+        return;
+      }
       const step = (node.data as Record<string, unknown>).step as Step;
       if (step) {
         openEditForm(step);
@@ -323,6 +353,37 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
     }
   };
 
+  // ─── Save workflow metadata ──────────────────────────────────────
+
+  const saveWorkflow = async () => {
+    setSavingWf(true);
+    try {
+      const res = await fetch('/api/workflows', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: workflow.id,
+          name: wfName,
+          trigger_type: wfTriggerType,
+          trigger_value: wfTriggerValue,
+          is_active: wfIsActive,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(`Failed to save: ${data.error || 'Unknown error'}`);
+        return;
+      }
+      setSavedWf(true);
+      setTimeout(() => setSavedWf(false), 2000);
+      setShowTriggerForm(false);
+    } catch (e) {
+      alert(`Error saving: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    } finally {
+      setSavingWf(false);
+    }
+  };
+
   // ─── Delete step ────────────────────────────────────────────────
 
   const deleteStep = async (id: string) => {
@@ -340,37 +401,88 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
   return (
     <div className="flex-1 w-full h-full bg-slate-50 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="flex items-center space-x-4 bg-white px-6 py-4 border-b border-slate-200 shadow-sm flex-shrink-0">
-        <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl transition-all">
-          <X className="w-5 h-5 text-slate-400" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-extrabold text-slate-900 truncate">{workflow.name}</h1>
-          <div className="flex items-center space-x-3 mt-0.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">
-              Trigger: {workflow.trigger_type?.replace('_', ' ')}
+      <div className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
+        {/* Row 1: Back + Name + Save */}
+        <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+          <button
+            onClick={() => isDirty ? setShowUnsavedDialog(true) : onBack()}
+            className="p-2 hover:bg-slate-100 rounded-xl transition-all flex-shrink-0"
+          >
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+          <input
+            value={wfName}
+            onChange={(e) => setWfName(e.target.value)}
+            className="flex-1 min-w-0 text-lg font-extrabold text-slate-900 bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-blue-400 outline-none transition-all"
+          />
+          {isDirty && (
+            <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex-shrink-0">Unsaved</span>
+          )}
+        </div>
+        {/* Row 2: Trigger info + View toggle */}
+        <div className="flex items-center justify-between px-4 pb-2">
+          <button
+            onClick={() => setShowTriggerForm(true)}
+            className="flex items-center gap-2 group"
+          >
+            <Zap className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+            <span className="text-[11px] font-bold text-slate-500 uppercase group-hover:text-blue-600 transition-colors">
+              {wfTriggerType?.replace(/_/g, ' ')}
             </span>
-            <span className="w-1 h-1 bg-slate-300 rounded-full" />
-            <span className="text-[10px] font-bold text-blue-500 uppercase">{workflow.trigger_value}</span>
+            {wfTriggerValue && (
+              <span className="text-[11px] font-bold text-blue-500 truncate max-w-[160px]">{wfTriggerValue}</span>
+            )}
+            <Edit2 className="w-3 h-3 text-slate-300 group-hover:text-blue-400 transition-colors" />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button
+                onClick={() => setViewMode('canvas')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'canvas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <Layout className="w-3.5 h-3.5" />
+                <span>Canvas</span>
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>List</span>
+              </button>
+            </div>
+            <button
+              onClick={saveWorkflow}
+              disabled={savingWf}
+              className={`px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all border ${
+                savedWf
+                  ? 'bg-emerald-500 text-white border-emerald-500'
+                  : isDirty
+                  ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                  : 'bg-white text-slate-500 border-slate-300 hover:border-blue-400 hover:text-blue-500'
+              }`}
+            >
+              {savedWf ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+              <span>{savedWf ? 'Saved' : savingWf ? 'Saving…' : 'Save'}</span>
+            </button>
           </div>
         </div>
+      </div>
 
-        <div className="flex bg-slate-100 p-1 rounded-xl">
-          <button
-            onClick={() => setViewMode('canvas')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-2 transition-all ${viewMode === 'canvas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            <Layout className="w-3.5 h-3.5" />
-            <span>Canvas</span>
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-2 transition-all ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            <List className="w-3.5 h-3.5" />
-            <span>List</span>
-          </button>
-        </div>
+      {/* ─── Floating Save Button ───────────────────────────────── */}
+      <div className="fixed top-4 right-4 z-[999]">
+        <button
+          onClick={saveWorkflow}
+          disabled={savingWf}
+          className={`px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-xl transition-all border ${
+            savedWf
+              ? 'bg-emerald-500 text-white border-emerald-500 shadow-emerald-200'
+              : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-blue-200'
+          }`}
+        >
+          {savedWf ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+          <span>{savedWf ? 'Saved!' : savingWf ? 'Saving…' : 'Save'}</span>
+        </button>
       </div>
 
       {/* Canvas / List */}
@@ -518,6 +630,153 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
           </button>
         )}
       </div>
+
+      {/* ─── Unsaved Changes Dialog ────────────────────────────── */}
+      {showUnsavedDialog && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 space-y-5">
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto">
+                <Save className="w-7 h-7 text-amber-500" />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-900">Unsaved Changes</h3>
+              <p className="text-sm text-slate-500">You have unsaved changes to this workflow. Do you want to save before leaving?</p>
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={async () => {
+                  await saveWorkflow();
+                  setShowUnsavedDialog(false);
+                  onBack();
+                }}
+                className="w-full py-3 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all"
+              >
+                Save & Exit
+              </button>
+              <button
+                onClick={() => { setShowUnsavedDialog(false); onBack(); }}
+                className="w-full py-3 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all"
+              >
+                Discard Changes
+              </button>
+              <button
+                onClick={() => setShowUnsavedDialog(false)}
+                className="w-full py-3 text-slate-500 font-bold hover:text-slate-700 transition-all"
+              >
+                Keep Editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Trigger Edit Modal ────────────────────────────────── */}
+      {showTriggerForm && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <Zap className="w-4 h-4 text-white" />
+                </div>
+                <h3 className="font-bold text-lg">Edit Trigger</h3>
+              </div>
+              <button
+                onClick={() => setShowTriggerForm(false)}
+                className="p-2 hover:bg-slate-800 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-5">
+              {/* Workflow name */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Workflow Name</label>
+                <input
+                  type="text"
+                  value={wfName}
+                  onChange={(e) => setWfName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              {/* Trigger Type */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Trigger Type</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {([
+                    { id: 'TAG_ADDED', label: 'Tag Added', desc: 'When a tag is added to a contact' },
+                    { id: 'TAG_REMOVED', label: 'Tag Removed', desc: 'When a tag is removed from a contact' },
+                    { id: 'USER_FOLLOW', label: 'User Follow', desc: 'When someone follows your LINE account' },
+                    { id: 'KEYWORD_RECEIVED', label: 'Keyword Received', desc: 'When a specific keyword is messaged' },
+                    { id: 'MANUAL', label: 'Manual', desc: 'Triggered manually from contact page' },
+                  ] as const).map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setWfTriggerType(t.id);
+                        if (t.id === 'USER_FOLLOW' || t.id === 'MANUAL') setWfTriggerValue('');
+                      }}
+                      className={`flex items-start space-x-3 p-3 rounded-xl border-2 text-left transition-all ${
+                        wfTriggerType === t.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-100 hover:border-slate-200'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-full border-2 mt-0.5 flex-shrink-0 transition-all ${
+                        wfTriggerType === t.id ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
+                      }`} />
+                      <div>
+                        <p className={`text-sm font-bold ${wfTriggerType === t.id ? 'text-blue-700' : 'text-slate-700'}`}>{t.label}</p>
+                        <p className="text-[11px] text-slate-400">{t.desc}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Trigger Value (only for tag/keyword triggers) */}
+              {(wfTriggerType === 'TAG_ADDED' || wfTriggerType === 'TAG_REMOVED' || wfTriggerType === 'KEYWORD_RECEIVED') && (
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                    {wfTriggerType === 'KEYWORD_RECEIVED' ? 'Keyword' : 'Tag Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={wfTriggerValue}
+                    onChange={(e) => setWfTriggerValue(e.target.value)}
+                    placeholder={wfTriggerType === 'KEYWORD_RECEIVED' ? 'e.g. register' : 'e.g. Interested'}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              )}
+
+              {/* Active toggle */}
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                <div>
+                  <p className="text-sm font-bold text-slate-700">Active</p>
+                  <p className="text-[11px] text-slate-400">Workflow will process enrollments when active</p>
+                </div>
+                <button
+                  onClick={() => setWfIsActive((v) => !v)}
+                  className={`w-12 h-6 rounded-full transition-all relative ${wfIsActive ? 'bg-blue-500' : 'bg-slate-200'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${wfIsActive ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+
+              <button
+                onClick={saveWorkflow}
+                disabled={savingWf}
+                className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition-all"
+              >
+                {savingWf ? 'Saving…' : 'Save Trigger'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Step Form Modal ───────────────────────────────────── */}
       {showStepForm && (
