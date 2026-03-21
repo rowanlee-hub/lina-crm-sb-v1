@@ -162,7 +162,9 @@ export async function POST(req: Request) {
 
         if (emailMatch) {
           // Merge: move LINE id + tags onto the GHL contact, delete this one
-          const mergedTags = [...new Set([...(emailMatch.tags || []), ...(existing?.tags || [])])];
+          let mergedTags = [...new Set([...(emailMatch.tags || []), ...(existing?.tags || [])])];
+          // Remove "Pending Match" tag since we've now matched
+          mergedTags = mergedTags.filter(t => t !== 'Pending Match');
           await supabase.from('contacts').update({
             line_id: existing.line_id,
             tags: mergedTags,
@@ -171,6 +173,17 @@ export async function POST(req: Request) {
           await supabase.from('contact_history').update({ contact_id: emailMatch.id }).eq('contact_id', contact.id);
           await supabase.from('contact_history').insert({ contact_id: emailMatch.id, action: `Merged [Manual]: LINE ID linked via email match` });
           await supabase.from('contacts').delete().eq('id', contact.id);
+
+          // Auto-push webinar link if the merged contact has one
+          if (emailMatch.webinar_link && existing.line_id) {
+            const { autoPushWebinarLink } = await import('@/lib/webinar-utils');
+            autoPushWebinarLink({
+              ...emailMatch,
+              line_id: existing.line_id,
+              tags: mergedTags,
+            }).catch(console.error);
+          }
+
           return NextResponse.json({ success: true, message: 'Merged with existing GHL contact', id: emailMatch.id });
         }
       }

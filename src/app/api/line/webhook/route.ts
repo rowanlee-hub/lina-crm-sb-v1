@@ -177,14 +177,69 @@ export async function POST(req: Request) {
         if (!result) continue;
         const { contact, isNew } = result;
 
+        const { getNextWebinarDate, sendLinePushMessage, getSetting } = await import('@/lib/webinar-utils');
+        const { processAutomations } = await import('@/lib/automation-engine');
+
         if (isNew) {
           await supabase.from('contact_history').insert({ contact_id: contact.id, action: 'Event: New Follow' });
-          console.log(`[Webhook] New follower ${userId} — triggering USER_FOLLOW automation`);
-          const { processAutomations } = await import('@/lib/automation-engine');
+          console.log(`[Webhook] New follower ${userId} — assigning webinar date & triggering automation`);
+
+          // Auto-assign webinar date
+          const webinarDate = getNextWebinarDate();
+          await supabase.from('contacts').update({
+            webinar_date: webinarDate,
+            updated_at: new Date().toISOString(),
+          }).eq('id', contact.id);
+
+          // Enroll in webinar sequence
+          const { enrollInWebinarSequence } = await import('@/lib/webinar-sequence');
+          enrollInWebinarSequence(contact.id, webinarDate, contact.name || '').catch(console.error);
+          console.log(`[Webhook] Assigned webinar date ${webinarDate} and enrolled ${userId}`);
+
+          // Send welcome message asking for email
+          const welcomeTemplate = await getSetting('follow_welcome_message');
+          if (welcomeTemplate) {
+            const { renderMessageSync } = await import('@/lib/render-message');
+            const rendered = renderMessageSync(welcomeTemplate, { ...contact, webinar_date: webinarDate });
+            const sent = await sendLinePushMessage(userId, rendered);
+            if (sent) {
+              await supabase.from('contact_history').insert({
+                contact_id: contact.id,
+                action: `Chat: [Auto] ${rendered}`,
+              });
+            }
+          }
+
+          // Trigger USER_FOLLOW automation
           processAutomations('USER_FOLLOW', 'FOLLOW', contact.id, userId);
         } else {
+          // Returning follower (block/unblock)
           await supabase.from('contact_history').insert({ contact_id: contact.id, action: 'Event: Re-follow (was blocked)' });
-          console.log(`[Webhook] Returning follower ${userId} (block/unblock) — skipping automation`);
+          console.log(`[Webhook] Returning follower ${userId} — checking enrollment status`);
+
+          // Check if contact has an active webinar enrollment
+          const { data: activeEnrollment } = await supabase
+            .from('webinar_enrollments')
+            .select('id')
+            .eq('contact_id', contact.id)
+            .eq('status', 'active')
+            .single();
+
+          if (!activeEnrollment) {
+            // No active enrollment — assign fresh webinar date and enroll
+            const webinarDate = getNextWebinarDate();
+            await supabase.from('contacts').update({
+              webinar_date: webinarDate,
+              updated_at: new Date().toISOString(),
+            }).eq('id', contact.id);
+
+            const { enrollInWebinarSequence } = await import('@/lib/webinar-sequence');
+            enrollInWebinarSequence(contact.id, webinarDate, contact.name || '').catch(console.error);
+            console.log(`[Webhook] Re-follower ${userId} had no active enrollment — assigned ${webinarDate}`);
+          }
+
+          // Trigger REFOLLOW automation so user can set up a different welcome message
+          processAutomations('USER_FOLLOW', 'REFOLLOW', contact.id, userId);
         }
       }
 
@@ -251,8 +306,41 @@ export async function POST(req: Request) {
           if (merged) {
             contact = merged as typeof contact;
             contactId = merged.id;
+
+            // Auto-push webinar link if the merged contact has one
+            if (merged.webinar_link) {
+              const { autoPushWebinarLink } = await import('@/lib/webinar-utils');
+              autoPushWebinarLink({ ...merged, line_id: userId }).catch(console.error);
+            }
+
+            // Auto-enroll in webinar sequence if merged contact has a date but no active enrollment
+            if (merged.webinar_date) {
+              const { data: activeEnrollment } = await supabase
+                .from('webinar_enrollments')
+                .select('id')
+                .eq('contact_id', merged.id)
+                .eq('status', 'active')
+                .single();
+              if (!activeEnrollment) {
+                const { enrollInWebinarSequence } = await import('@/lib/webinar-sequence');
+                enrollInWebinarSequence(merged.id, merged.webinar_date, merged.name || '').catch(console.error);
+              }
+            }
           } else {
             await supabase.from('contacts').update({ email, updated_at: new Date().toISOString() }).eq('id', contactId);
+
+            // Tag "Pending Match" so user can find unmatched contacts
+            const currentContactTags: string[] = contact.tags || [];
+            if (!currentContactTags.includes('Pending Match')) {
+              const updatedTags = [...currentContactTags, 'Pending Match'];
+              await supabase.from('contacts').update({ tags: updatedTags }).eq('id', contactId);
+              contact.tags = updatedTags;
+              await supabase.from('contact_history').insert({
+                contact_id: contactId,
+                action: `Tag Added [Auto]: Pending Match — email ${email} not found in GHL contacts`,
+              });
+              console.log(`[Webhook] Tagged "Pending Match" for ${userId} — email ${email} has no GHL match`);
+            }
           }
         } else if (phoneMatch) {
           const phone = phoneMatch[1].replace(/[\s\-()]/g, '');

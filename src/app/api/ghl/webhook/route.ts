@@ -118,6 +118,21 @@ export async function POST(req: Request) {
         action: `GHL Sync: Updated from GoHighLevel`
       });
 
+      // Auto-push webinar link to LINE if it was newly added/changed
+      const prevWebinarLink = existingContact.webinar_link || '';
+      if (webinar_link && webinar_link !== prevWebinarLink && existingContact.line_id) {
+        const { autoPushWebinarLink } = await import('@/lib/webinar-utils');
+        autoPushWebinarLink({
+          id: existingContact.id,
+          line_id: existingContact.line_id,
+          webinar_link: webinar_link,
+          name: name || existingContact.name,
+          email: email || existingContact.email,
+          webinar_date: webinar_date || existingContact.webinar_date,
+          tags: mergedTags,
+        }).catch(console.error);
+      }
+
       // Trigger automations for new tags
       const newTags = (tags || []).filter((t: string) => !(existingContact.tags || []).includes(t));
       if (newTags.length > 0) {
