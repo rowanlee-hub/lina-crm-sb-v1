@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { renderMessage } from '@/lib/render-message';
+import { buildLineMessages } from '@/lib/line-messages';
 
 export async function POST(req: Request) {
   try {
@@ -34,13 +35,18 @@ export async function POST(req: Request) {
     // Render {{variables}} (webinar_link, name, webinar_date, etc.)
     const rendered = await renderMessage(message, contact);
 
+    const lineMessages = buildLineMessages(rendered);
+    if (lineMessages.length === 0) {
+      return NextResponse.json({ success: false, error: 'Empty message' }, { status: 400 });
+    }
+
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({ to: lineId, messages: [{ type: 'text', text: rendered }] }),
+      body: JSON.stringify({ to: lineId, messages: lineMessages }),
     });
 
     if (!response.ok) {

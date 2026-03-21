@@ -940,6 +940,7 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                       />
                       <p className="text-[10px] text-slate-400 mt-1">
                         Variables: {'{{name}}'}, {'{{email}}'}, {'{{phone}}'}, {'{{tags}}'}, {'{{webinar_link}}'}, {'{{webinar_date}}'}
+                        <br />Media: [image:URL] or [video:URL] or [video:URL|PREVIEW_URL]
                       </p>
                     </div>
                   )}

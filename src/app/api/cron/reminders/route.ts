@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { executeWorkflowNode, processWaitQueues } from '@/lib/workflow-engine';
+import { buildLineMessages } from '@/lib/line-messages';
 
 /**
  * Cron Dispatch Handler — Called every 15 minutes by cron-job.org
@@ -231,10 +232,12 @@ export async function GET() {
 
 async function sendLineMessage(token: string, lineId: string, message: string): Promise<boolean> {
   try {
+    const lineMessages = buildLineMessages(message);
+    if (lineMessages.length === 0) return false;
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ to: lineId, messages: [{ type: 'text', text: message }] }),
+      body: JSON.stringify({ to: lineId, messages: lineMessages }),
     });
     return response.ok;
   } catch {

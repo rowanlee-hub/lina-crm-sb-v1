@@ -60,19 +60,17 @@ async function executeSendMessage(contactId: string, lineId: string, message: st
   const { renderMessageSync } = await import('./render-message');
   const rendered = renderMessageSync(message, contact ?? {});
 
-  const url = 'https://api.line.me/v2/bot/message/push';
-  const payload = {
-    to: lineId,
-    messages: [{ type: 'text', text: rendered }]
-  };
+  const { buildLineMessages } = await import('./line-messages');
+  const lineMessages = buildLineMessages(rendered);
+  if (lineMessages.length === 0) return;
 
-  const response = await fetch(url, {
+  const response = await fetch('https://api.line.me/v2/bot/message/push', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ to: lineId, messages: lineMessages })
   });
 
   if (response.ok) {

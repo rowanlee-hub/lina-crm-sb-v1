@@ -2356,7 +2356,9 @@ function ConversationsView({ contacts, selectedId, onUpdateContact }: Conversati
              rows={4}
            />
            <div className="flex items-center justify-between">
-             <span className="text-[11px] text-slate-400">Enter = new line</span>
+             <div className="flex items-center gap-2">
+               <span className="text-[11px] text-slate-400">Media: [image:URL] or [video:URL]</span>
+             </div>
              <button
                onClick={handleSendLineMessage}
                disabled={!lineMessageText.trim() || isSendingMessage}

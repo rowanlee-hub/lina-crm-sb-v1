@@ -187,13 +187,17 @@ export async function executeWorkflowNode(
         const lineId = contact.line_id;
         const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
         if (lineId && token) {
-          const res = await fetch('https://api.line.me/v2/bot/message/push', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ to: lineId, messages: [{ type: 'text', text: rendered }] }),
-          });
-          success = res.ok;
-          if (!res.ok) console.error(`[WorkflowEngine] LINE send failed:`, await res.text());
+          const { buildLineMessages } = await import('./line-messages');
+          const lineMessages = buildLineMessages(rendered);
+          if (lineMessages.length > 0) {
+            const res = await fetch('https://api.line.me/v2/bot/message/push', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ to: lineId, messages: lineMessages }),
+            });
+            success = res.ok;
+            if (!res.ok) console.error(`[WorkflowEngine] LINE send failed:`, await res.text());
+          }
         } else {
           console.error(`[WorkflowEngine] Cannot send message: no line_id or token`);
         }
