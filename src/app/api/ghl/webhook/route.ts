@@ -29,13 +29,15 @@ export async function POST(req: Request) {
     const webinar_link = body['Webinar link'] || body['Webinar replay link'] || body.webinar_link || '';
 
     // Normalise tags — GHL may send a string, array, or comma-separated string
-    const rawTags = body.tags;
+    // Also check common GHL field name variations
+    const rawTags = body.tags ?? body.contactTags ?? body.contact_tags ?? body.tag;
     let tags: string[] = [];
     if (Array.isArray(rawTags)) {
       tags = rawTags.flatMap((t: string) => t.split(',').map((s: string) => s.trim())).filter(Boolean);
     } else if (typeof rawTags === 'string' && rawTags.trim()) {
       tags = rawTags.split(',').map((s: string) => s.trim()).filter(Boolean);
     }
+    console.log(`GHL Webhook [${email || ghlId}] rawTags:`, JSON.stringify(rawTags), '→ parsed:', JSON.stringify(tags));
 
     // Determine webinar date:
     // If contact has webinar-MMDD tag(s), pick the LATEST one to handle returning leads
@@ -91,6 +93,7 @@ export async function POST(req: Request) {
     if (existingContact) {
       // Update existing contact
       const mergedTags = [...new Set([...(existingContact.tags || []), ...(tags || [])])];
+      console.log(`GHL Webhook [${email || ghlId}] existing tags:`, JSON.stringify(existingContact.tags), '+ incoming:', JSON.stringify(tags), '= merged:', JSON.stringify(mergedTags));
       const { error: updateError } = await supabase.from('contacts').update({
         name: name || existingContact.name,
         email: email || existingContact.email,
