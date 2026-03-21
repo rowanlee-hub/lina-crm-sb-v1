@@ -77,49 +77,81 @@ async function evaluateCondition(step: any, contact: any): Promise<boolean> {
   if (!config || !config.field) return false;
 
   const field = config.field;
-  const val = contact[field];
-  const target = config.value;
+  const operator = config.operator || '==';
+  const target = config.value || '';
 
-  console.log(`[WorkflowEngine] Evaluating condition: ${field} (${val}) ${config.operator} ${target}`);
-
-  // ─── Webinar upcoming check ───────────────────────────────
-  // YES = webinar_date exists AND is today or in the future AND webinar_link exists
-  // NO = no date, past date, or no link
+  // ─── Special computed fields ──────────────────────────────
   if (field === 'webinar_upcoming') {
     const webinarDate = contact.webinar_date;
     const webinarLink = contact.webinar_link;
-    if (!webinarDate || !webinarLink) {
-      console.log(`[WorkflowEngine] webinar_upcoming: NO (missing date or link)`);
-      return false;
-    }
+    if (!webinarDate || !webinarLink) return false;
     const today = new Date().toISOString().substring(0, 10);
     const dateStr = String(webinarDate).substring(0, 10);
-    const isUpcoming = dateStr >= today;
-    console.log(`[WorkflowEngine] webinar_upcoming: ${isUpcoming ? 'YES' : 'NO'} (date=${dateStr}, today=${today})`);
-    return isUpcoming;
+    return dateStr >= today;
   }
 
-  // ─── Has webinar link check ───────────────────────────────
-  if (field === 'has_webinar_link') {
-    const hasLink = !!contact.webinar_link;
-    console.log(`[WorkflowEngine] has_webinar_link: ${hasLink}`);
-    return hasLink;
-  }
-
-  if (config.operator === '==') {
-    // Handle boolean strings from UI
-    if (target === 'true') return val === true;
-    if (target === 'false') return val === false;
-    return String(val) === String(target);
-  }
-
-  // Tag check
+  // ─── Resolve field value ──────────────────────────────────
+  let val: any;
   if (field === 'tags') {
-    const tags = contact.tags || [];
-    return tags.includes(target);
+    val = contact.tags || [];
+  } else {
+    val = contact[field];
   }
 
-  return false;
+  const valStr = val == null ? '' : String(val).toLowerCase();
+  const targetStr = target.toLowerCase();
+
+  console.log(`[WorkflowEngine] Condition: ${field} (${valStr}) ${operator} ${targetStr}`);
+
+  // ─── Operators ────────────────────────────────────────────
+  switch (operator) {
+    case 'exists':
+      if (Array.isArray(val)) return val.length > 0;
+      return val != null && val !== '' && val !== false;
+
+    case 'not_exists':
+      if (Array.isArray(val)) return val.length === 0;
+      return val == null || val === '' || val === false;
+
+    case '==':
+    case 'equals':
+      if (target === 'true') return val === true;
+      if (target === 'false') return val === false;
+      return valStr === targetStr;
+
+    case '!=':
+    case 'not_equals':
+      return valStr !== targetStr;
+
+    case 'contains':
+      if (Array.isArray(val)) return val.some((v: string) => String(v).toLowerCase().includes(targetStr));
+      return valStr.includes(targetStr);
+
+    case 'not_contains':
+      if (Array.isArray(val)) return !val.some((v: string) => String(v).toLowerCase().includes(targetStr));
+      return !valStr.includes(targetStr);
+
+    case 'starts_with':
+      return valStr.startsWith(targetStr);
+
+    case 'ends_with':
+      return valStr.endsWith(targetStr);
+
+    case '>':
+      return Number(val) > Number(target);
+
+    case '<':
+      return Number(val) < Number(target);
+
+    case 'has_tag':
+      return (contact.tags || []).some((t: string) => t.toLowerCase() === targetStr);
+
+    case 'not_has_tag':
+      return !(contact.tags || []).some((t: string) => t.toLowerCase() === targetStr);
+
+    default:
+      return valStr === targetStr;
+  }
 }
 
 /**

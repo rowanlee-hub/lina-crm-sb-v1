@@ -136,8 +136,12 @@ function StepCard({ step, onClick, onDelete }: { step: Step; onClick: () => void
       subtitle = step.action_value || '';
     }
   } else if (isCondition) {
-    title = `If ${step.condition_config?.field || '?'}`;
-    subtitle = `${step.condition_config?.operator || '=='} ${step.condition_config?.value || '?'}`;
+    const cf = step.condition_config;
+    const fieldLabel = cf?.field?.replace(/_/g, ' ') || '?';
+    const op = cf?.operator || '==';
+    const opLabels: Record<string, string> = { '==': '=', '!=': '≠', 'contains': 'contains', 'not_contains': 'not contains', 'exists': 'exists', 'not_exists': 'not exists', 'has_tag': 'has tag', 'not_has_tag': 'not has tag', 'starts_with': 'starts with', 'ends_with': 'ends with', '>': '>', '<': '<' };
+    title = `If ${fieldLabel}`;
+    subtitle = `${opLabels[op] || op}${cf?.value ? ` "${cf.value}"` : ''}`;
   } else if (isWait) {
     title = 'Wait';
     subtitle = `${step.wait_config?.amount || 1} ${step.wait_config?.unit || 'days'}`;
@@ -200,32 +204,6 @@ function AddStepButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-// ─── Build ordered step list from tree ──────────────────────────────
-
-function buildOrderedList(steps: Step[]): Step[] {
-  // Build a flat ordered list by walking the parent→child tree
-  const childMap = new Map<string | null, Step[]>();
-  for (const s of steps) {
-    const key = s.parent_id || null;
-    if (!childMap.has(key)) childMap.set(key, []);
-    childMap.get(key)!.push(s);
-  }
-  // Sort children by step_order
-  for (const [, children] of childMap) {
-    children.sort((a, b) => a.step_order - b.step_order);
-  }
-
-  const result: Step[] = [];
-  function walk(parentId: string | null) {
-    const children = childMap.get(parentId) || [];
-    for (const child of children) {
-      result.push(child);
-      walk(child.id);
-    }
-  }
-  walk(null);
-  return result;
-}
 
 // ─── Main Component ─────────────────────────────────────────────────
 
@@ -277,7 +255,7 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
   const [waitAmount, setWaitAmount] = useState(1);
   const [waitUnit, setWaitUnit] = useState('days');
   const [condField, setCondField] = useState('attended');
-  const [condOp] = useState('==');
+  const [condOp, setCondOp] = useState('==');
   const [condVal, setCondVal] = useState('true');
   const [scheduleAt, setScheduleAt] = useState('');
   const [targetWorkflowId, setTargetWorkflowId] = useState('');
@@ -322,6 +300,7 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
     setWaitAmount(1);
     setWaitUnit('days');
     setCondField('attended');
+    setCondOp('==');
     setCondVal('true');
     setScheduleAt('');
     setTargetWorkflowId('');
@@ -339,6 +318,7 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
     }
     if (step.condition_config) {
       setCondField(step.condition_config.field || 'attended');
+      setCondOp(step.condition_config.operator || '==');
       setCondVal(step.condition_config.value || 'true');
     }
     if (step.schedule_config) {
@@ -478,10 +458,6 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
     }
   };
 
-  // ─── Ordered steps for vertical display ─────────────────────────
-
-  const orderedSteps = buildOrderedList(steps);
-
   // ─── Render ─────────────────────────────────────────────────────
 
   return (
@@ -580,28 +556,127 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
           {/* Add first step */}
           <AddStepButton onClick={() => openAddForm(undefined)} />
 
-          {/* Steps */}
-          {orderedSteps.map((step, idx) => (
-            <div key={step.id}>
-              <StepCard
-                step={step}
-                onClick={() => openEditForm(step)}
-                onDelete={() => deleteStep(step.id)}
-              />
-              <AddStepButton onClick={() => openAddForm(step.id)} />
-            </div>
-          ))}
+          {/* Steps — recursive tree with YES/NO split */}
+          {(() => {
+            const childMap = new Map<string | null, Step[]>();
+            for (const s of steps) {
+              const key = s.parent_id || null;
+              if (!childMap.has(key)) childMap.set(key, []);
+              childMap.get(key)!.push(s);
+            }
+            for (const [, children] of childMap) {
+              children.sort((a, b) => a.step_order - b.step_order);
+            }
 
-          {/* Empty state */}
-          {orderedSteps.length === 0 && (
-            <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-3xl">
-              <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Plus className="w-7 h-7 text-slate-400" />
-              </div>
-              <p className="text-slate-400 font-bold text-sm">No steps yet</p>
-              <p className="text-slate-300 text-xs mt-1">Click the + button above to add your first step</p>
-            </div>
-          )}
+            function renderBranch(parentId: string | null): React.ReactNode {
+              const children = childMap.get(parentId) || [];
+              if (children.length === 0) return null;
+              return children.map((step) => {
+                const isCondition = step.node_type === 'CONDITION';
+                const yesChildren = childMap.get(step.id)?.filter((c) => c.branch_type === 'YES') || [];
+                const noChildren = childMap.get(step.id)?.filter((c) => c.branch_type === 'NO') || [];
+                const defaultChildren = childMap.get(step.id)?.filter((c) => !c.branch_type || c.branch_type === 'DEFAULT') || [];
+                const hasBranches = isCondition && (yesChildren.length > 0 || noChildren.length > 0);
+
+                return (
+                  <div key={step.id}>
+                    <StepCard
+                      step={step}
+                      onClick={() => openEditForm(step)}
+                      onDelete={() => deleteStep(step.id)}
+                    />
+
+                    {/* Condition → split into YES / NO columns */}
+                    {isCondition && (
+                      <div className="mt-1">
+                        <div className="flex items-start gap-3">
+                          {/* YES branch */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-col items-center">
+                              <div className="w-0.5 h-4 bg-emerald-300" />
+                              <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 uppercase tracking-widest">YES</span>
+                              <div className="w-0.5 h-4 bg-emerald-300" />
+                            </div>
+                            <div className="border-2 border-emerald-200 rounded-2xl p-3 bg-emerald-50/30 space-y-0">
+                              {yesChildren.map((child) => (
+                                <div key={child.id}>
+                                  <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
+                                  {renderBranch(child.id)}
+                                  <AddStepButton onClick={() => { setNewBranchType('YES'); openAddForm(step.id); }} />
+                                </div>
+                              ))}
+                              {yesChildren.length === 0 && (
+                                <div className="flex flex-col items-center py-4">
+                                  <button
+                                    onClick={() => { setNewBranchType('YES'); openAddForm(step.id); }}
+                                    className="w-8 h-8 rounded-full border-2 border-dashed border-emerald-300 flex items-center justify-center text-emerald-400 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                  <p className="text-[10px] text-emerald-400 mt-1">Add step</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* NO branch */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-col items-center">
+                              <div className="w-0.5 h-4 bg-red-300" />
+                              <span className="text-[9px] font-black text-red-600 bg-red-50 border border-red-200 rounded-full px-3 py-1 uppercase tracking-widest">NO</span>
+                              <div className="w-0.5 h-4 bg-red-300" />
+                            </div>
+                            <div className="border-2 border-red-200 rounded-2xl p-3 bg-red-50/30 space-y-0">
+                              {noChildren.map((child) => (
+                                <div key={child.id}>
+                                  <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
+                                  {renderBranch(child.id)}
+                                  <AddStepButton onClick={() => { setNewBranchType('NO'); openAddForm(step.id); }} />
+                                </div>
+                              ))}
+                              {noChildren.length === 0 && (
+                                <div className="flex flex-col items-center py-4">
+                                  <button
+                                    onClick={() => { setNewBranchType('NO'); openAddForm(step.id); }}
+                                    className="w-8 h-8 rounded-full border-2 border-dashed border-red-300 flex items-center justify-center text-red-400 hover:border-red-500 hover:text-red-600 hover:bg-red-50 transition-all"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                  <p className="text-[10px] text-red-400 mt-1">Add step</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Non-condition → add button then render default children inline */}
+                    {!isCondition && (
+                      <>
+                        <AddStepButton onClick={() => openAddForm(step.id)} />
+                        {renderBranch(step.id)}
+                      </>
+                    )}
+                  </div>
+                );
+              });
+            }
+
+            const rootChildren = childMap.get(null) || [];
+            if (rootChildren.length === 0) {
+              return (
+                <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-3xl">
+                  <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Plus className="w-7 h-7 text-slate-400" />
+                  </div>
+                  <p className="text-slate-400 font-bold text-sm">No steps yet</p>
+                  <p className="text-slate-300 text-xs mt-1">Click the + button above to add your first step</p>
+                </div>
+              );
+            }
+            return renderBranch(null);
+          })()}
         </div>
       </div>}
 
@@ -1019,57 +1094,121 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                 </div>
               )}
 
-              {/* CONDITION Config */}
-              {stepNodeType === 'CONDITION' && (
-                <div className="space-y-4">
-                  <p className="text-xs text-slate-400 italic">Contacts will split into YES/NO paths based on this condition.</p>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Field</label>
-                    <select
-                      value={condField}
-                      onChange={(e) => setCondField(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
-                    >
-                      <option value="webinar_upcoming">Webinar Link is Upcoming</option>
-                      <option value="has_webinar_link">Has Webinar Link</option>
-                      <option value="attended">Attended Webinar</option>
-                      <option value="purchased">Product Purchased</option>
-                      <option value="tags">Has Tag</option>
-                      <option value="status">Status</option>
-                    </select>
+              {/* CONDITION Config — Make.com-style filter */}
+              {stepNodeType === 'CONDITION' && (() => {
+                const FIELD_OPTIONS = [
+                  { value: 'webinar_upcoming', label: 'Webinar is Upcoming', group: 'Webinar' },
+                  { value: 'webinar_link', label: 'Webinar Link', group: 'Webinar' },
+                  { value: 'webinar_date', label: 'Webinar Date', group: 'Webinar' },
+                  { value: 'attended', label: 'Attended Webinar', group: 'Webinar' },
+                  { value: 'purchased', label: 'Product Purchased', group: 'Contact' },
+                  { value: 'tags', label: 'Tags', group: 'Contact' },
+                  { value: 'status', label: 'Status', group: 'Contact' },
+                  { value: 'name', label: 'Name', group: 'Contact' },
+                  { value: 'email', label: 'Email', group: 'Contact' },
+                  { value: 'phone', label: 'Phone', group: 'Contact' },
+                  { value: 'notes', label: 'Notes', group: 'Contact' },
+                  { value: 'line_id', label: 'LINE ID', group: 'Contact' },
+                ];
+                const isSpecialField = condField === 'webinar_upcoming';
+                const isTagField = condField === 'tags';
+                const isBoolField = ['attended', 'purchased'].includes(condField);
+                const OPERATOR_OPTIONS = isTagField
+                  ? [
+                      { value: 'has_tag', label: 'Has tag' },
+                      { value: 'not_has_tag', label: 'Does not have tag' },
+                      { value: 'exists', label: 'Has any tags' },
+                      { value: 'not_exists', label: 'Has no tags' },
+                    ]
+                  : isBoolField
+                  ? [
+                      { value: '==', label: 'Equals' },
+                    ]
+                  : [
+                      { value: '==', label: 'Equals' },
+                      { value: '!=', label: 'Does not equal' },
+                      { value: 'contains', label: 'Contains' },
+                      { value: 'not_contains', label: 'Does not contain' },
+                      { value: 'exists', label: 'Exists (has value)' },
+                      { value: 'not_exists', label: 'Does not exist (empty)' },
+                      { value: 'starts_with', label: 'Starts with' },
+                      { value: 'ends_with', label: 'Ends with' },
+                    ];
+                const hideValue = ['exists', 'not_exists'].includes(condOp) || isSpecialField;
+                return (
+                  <div className="space-y-4">
+                    <p className="text-xs text-slate-400 italic">Contacts will split into YES / NO paths based on this filter.</p>
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Field</label>
+                        <select
+                          value={condField}
+                          onChange={(e) => {
+                            const f = e.target.value;
+                            setCondField(f);
+                            if (f === 'webinar_upcoming') { setCondOp('=='); setCondVal(''); }
+                            else if (f === 'tags') { setCondOp('has_tag'); setCondVal(''); }
+                            else if (['attended', 'purchased'].includes(f)) { setCondOp('=='); setCondVal('true'); }
+                            else { setCondOp('=='); setCondVal(''); }
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          {['Webinar', 'Contact'].map((group) => (
+                            <optgroup key={group} label={group}>
+                              {FIELD_OPTIONS.filter((f) => f.group === group).map((f) => (
+                                <option key={f.value} value={f.value}>{f.label}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
+                      {!isSpecialField && (
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Operator</label>
+                          <select
+                            value={condOp}
+                            onChange={(e) => setCondOp(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+                          >
+                            {OPERATOR_OPTIONS.map((op) => (
+                              <option key={op.value} value={op.value}>{op.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      {!hideValue && (
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Value</label>
+                          {isBoolField ? (
+                            <select
+                              value={condVal}
+                              onChange={(e) => setCondVal(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+                            >
+                              <option value="true">True</option>
+                              <option value="false">False</option>
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={condVal}
+                              onChange={(e) => setCondVal(e.target.value)}
+                              placeholder={isTagField ? 'e.g. Interested' : 'e.g. active'}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+                            />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {isSpecialField && (
+                      <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700">
+                        <strong>YES</strong> = contact has a webinar link AND the webinar date is today or in the future<br />
+                        <strong>NO</strong> = no link, no date, or date has passed (expired)
+                      </div>
+                    )}
                   </div>
-                  {/* Hide operator/value for built-in checks that don't need them */}
-                  {condField !== 'webinar_upcoming' && condField !== 'has_webinar_link' && (
-                    <div className="flex space-x-2">
-                      <input
-                        type="text"
-                        readOnly
-                        value={condOp}
-                        className="w-16 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-center"
-                      />
-                      <input
-                        type="text"
-                        value={condVal}
-                        onChange={(e) => setCondVal(e.target.value)}
-                        placeholder="true"
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
-                      />
-                    </div>
-                  )}
-                  {condField === 'webinar_upcoming' && (
-                    <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700">
-                      <strong>YES</strong> = contact has a webinar link AND the webinar date is today or in the future<br />
-                      <strong>NO</strong> = no link, no date, or date has passed (expired)
-                    </div>
-                  )}
-                  {condField === 'has_webinar_link' && (
-                    <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700">
-                      <strong>YES</strong> = contact has a webinar link set<br />
-                      <strong>NO</strong> = no webinar link
-                    </div>
-                  )}
-                </div>
-              )}
+                );
+              })()}
 
               {/* Save / Delete buttons */}
               <div className="pt-4 space-y-3">
