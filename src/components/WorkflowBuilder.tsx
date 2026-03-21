@@ -266,6 +266,10 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
   const [scheduleAt, setScheduleAt] = useState('');
   const [targetWorkflowId, setTargetWorkflowId] = useState('');
   const [routerMode, setRouterMode] = useState<'first_match' | 'all_match'>('first_match');
+  const [filterRules, setFilterRules] = useState<{ field: string; operator: string; value: string }[]>([]);
+  const [filterLogic, setFilterLogic] = useState<'AND' | 'OR'>('AND');
+  const [showFilterEditor, setShowFilterEditor] = useState(false);
+  const [filterEditStepId, setFilterEditStepId] = useState<string | null>(null);
   const [allWorkflows, setAllWorkflows] = useState<{ id: string; name: string }[]>([]);
 
   // Load other workflows for enroll/remove dropdown
@@ -312,6 +316,8 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
     setScheduleAt('');
     setTargetWorkflowId('');
     setRouterMode('first_match');
+    setFilterRules([]);
+    setFilterLogic('AND');
   }
 
   function openEditForm(step: Step) {
@@ -338,7 +344,39 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
     if (step.router_config) {
       setRouterMode(step.router_config.mode || 'first_match');
     }
+    if (step.filter_config) {
+      setFilterRules(step.filter_config.rules || []);
+      setFilterLogic(step.filter_config.logic || 'AND');
+    } else {
+      setFilterRules([]);
+      setFilterLogic('AND');
+    }
     setShowStepForm(true);
+  }
+
+  function openFilterEditor(step: Step) {
+    setFilterEditStepId(step.id);
+    setFilterRules(step.filter_config?.rules || []);
+    setFilterLogic(step.filter_config?.logic || 'AND');
+    setShowFilterEditor(true);
+  }
+
+  async function saveFilterForStep() {
+    if (!filterEditStepId) return;
+    const fc = filterRules.length > 0 ? { rules: filterRules, logic: filterLogic } : null;
+    try {
+      const res = await fetch('/api/workflows/steps', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: filterEditStepId, filter_config: fc }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSteps(prev => prev.map(s => s.id === filterEditStepId ? { ...s, filter_config: fc } as Step : s));
+      }
+    } catch {}
+    setShowFilterEditor(false);
+    setFilterEditStepId(null);
   }
 
   function openAddForm(afterStepId?: string) {
@@ -389,6 +427,14 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
       payload.condition_config = { field: condField, operator: condOp, value: condVal };
     } else if (stepNodeType === 'ROUTER') {
       payload.router_config = { mode: routerMode };
+    }
+
+    // Attach filter_config if this step is a direct child of a ROUTER
+    const parentStep = steps.find(s => s.id === (editingStep?.parent_id || newParentId));
+    if (parentStep?.node_type === 'ROUTER' && filterRules.length > 0) {
+      payload.filter_config = { rules: filterRules, logic: filterLogic };
+    } else if (parentStep?.node_type === 'ROUTER' && filterRules.length === 0) {
+      payload.filter_config = null;
     }
 
     try {
@@ -684,13 +730,23 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                               const stepsInBranch = branchChildren.filter(c => c.branch_type === bt);
                               const branchLabel = `Branch ${idx + 1}`;
                               const firstStep = stepsInBranch[0];
-                              const summary = firstStep?.filter_config ? filterSummary(firstStep.filter_config) : 'No filter';
+                              const summary = firstStep?.filter_config ? filterSummary(firstStep.filter_config) : 'Click to add filter';
                               return (
                                 <div key={bt} className="flex-1 min-w-[140px]">
                                   <div className="flex flex-col items-center">
                                     <div className={`w-0.5 h-4 ${color.line}`} />
-                                    <span className={`text-[9px] font-black ${color.text} ${color.pill} border rounded-full px-3 py-1 uppercase tracking-widest whitespace-nowrap`}>{branchLabel}</span>
-                                    <p className="text-[8px] text-slate-400 mt-0.5 truncate max-w-full px-1">{summary}</p>
+                                    <button
+                                      onClick={() => firstStep && openFilterEditor(firstStep)}
+                                      className={`text-[9px] font-black ${color.text} ${color.pill} border rounded-full px-3 py-1 uppercase tracking-widest whitespace-nowrap hover:shadow-md transition-all cursor-pointer`}
+                                    >
+                                      {branchLabel}
+                                    </button>
+                                    <button
+                                      onClick={() => firstStep && openFilterEditor(firstStep)}
+                                      className="text-[8px] text-slate-400 mt-0.5 truncate max-w-full px-1 hover:text-purple-500 cursor-pointer transition-colors"
+                                    >
+                                      {summary}
+                                    </button>
                                     <div className={`w-0.5 h-3 ${color.line}`} />
                                   </div>
                                   <div className={`border-2 ${color.border} rounded-2xl p-3 ${color.bg}`}>
@@ -1087,15 +1143,138 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                 </div>
               )}
 
-              {/* Router branch info */}
-              {!editingStep && steps.find((s) => s.id === newParentId)?.node_type === 'ROUTER' && (
-                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
-                  <p className="text-xs font-bold text-purple-700">
-                    Adding to: <span className="uppercase">{newBranchType === 'FALLBACK' ? 'Fallback' : newBranchType?.replace('_', ' ')}</span>
-                  </p>
-                  <p className="text-[10px] text-purple-500 mt-1">This step will be added to the selected router branch.</p>
-                </div>
-              )}
+              {/* Router branch filter — shows when parent is ROUTER */}
+              {(() => {
+                const parentIsRouter = editingStep
+                  ? steps.find(s => s.id === editingStep.parent_id)?.node_type === 'ROUTER'
+                  : steps.find(s => s.id === newParentId)?.node_type === 'ROUTER';
+                const branchLabel = newBranchType === 'FALLBACK' ? 'Fallback' : newBranchType?.replace('_', ' ');
+                if (!parentIsRouter) return null;
+                return (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
+                      <p className="text-xs font-bold text-purple-700">
+                        Route: <span className="uppercase">{branchLabel}</span>
+                      </p>
+                    </div>
+                    {newBranchType !== 'FALLBACK' && (
+                      <div className="p-4 bg-purple-50/50 rounded-2xl border border-purple-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold text-purple-600 uppercase tracking-widest">Take this route if...</label>
+                          {filterRules.length > 1 && (
+                            <select
+                              value={filterLogic}
+                              onChange={(e) => setFilterLogic(e.target.value as 'AND' | 'OR')}
+                              className="text-[10px] font-bold bg-white border border-purple-200 rounded-lg px-2 py-1 text-purple-600"
+                            >
+                              <option value="AND">ALL rules match (AND)</option>
+                              <option value="OR">ANY rule matches (OR)</option>
+                            </select>
+                          )}
+                        </div>
+                        {filterRules.map((rule, ri) => (
+                          <div key={ri} className="flex items-start gap-2">
+                            <div className="flex-1 space-y-2">
+                              <select
+                                value={rule.field}
+                                onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], field: e.target.value }; setFilterRules(r); }}
+                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                              >
+                                <optgroup label="Contact">
+                                  <option value="name">Name</option>
+                                  <option value="email">Email</option>
+                                  <option value="phone">Phone</option>
+                                  <option value="status">Status</option>
+                                  <option value="tags">Tags</option>
+                                  <option value="notes">Notes</option>
+                                  <option value="line_id">LINE ID</option>
+                                  <option value="attended">Attended</option>
+                                  <option value="purchased">Purchased</option>
+                                </optgroup>
+                                <optgroup label="Webinar">
+                                  <option value="webinar_upcoming">Webinar is Upcoming</option>
+                                  <option value="webinar_link">Webinar Link</option>
+                                  <option value="webinar_date">Webinar Date</option>
+                                </optgroup>
+                              </select>
+                              <div className="flex gap-2">
+                                <select
+                                  value={rule.operator}
+                                  onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], operator: e.target.value }; setFilterRules(r); }}
+                                  className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                                >
+                                  {rule.field === 'tags' ? (
+                                    <>
+                                      <option value="has_tag">Has tag</option>
+                                      <option value="not_has_tag">Does not have tag</option>
+                                      <option value="exists">Has any tags</option>
+                                      <option value="not_exists">Has no tags</option>
+                                    </>
+                                  ) : ['attended', 'purchased'].includes(rule.field) ? (
+                                    <option value="==">Equals</option>
+                                  ) : (
+                                    <>
+                                      <option value="==">Equals</option>
+                                      <option value="!=">Does not equal</option>
+                                      <option value="contains">Contains</option>
+                                      <option value="not_contains">Does not contain</option>
+                                      <option value="exists">Exists (has value)</option>
+                                      <option value="not_exists">Does not exist (empty)</option>
+                                      <option value="starts_with">Starts with</option>
+                                      <option value="ends_with">Ends with</option>
+                                    </>
+                                  )}
+                                </select>
+                                {!['exists', 'not_exists'].includes(rule.operator) && rule.field !== 'webinar_upcoming' && (
+                                  ['attended', 'purchased'].includes(rule.field) ? (
+                                    <select
+                                      value={rule.value}
+                                      onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], value: e.target.value }; setFilterRules(r); }}
+                                      className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                                    >
+                                      <option value="true">True</option>
+                                      <option value="false">False</option>
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      value={rule.value}
+                                      onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], value: e.target.value }; setFilterRules(r); }}
+                                      placeholder="value..."
+                                      className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                                    />
+                                  )
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setFilterRules(prev => prev.filter((_, i) => i !== ri))}
+                              className="p-1.5 text-slate-400 hover:text-red-500 transition-colors mt-1"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        {filterRules.length === 0 && (
+                          <p className="text-[10px] text-purple-400 italic">No filter — this route will always run. Add a rule to make it conditional.</p>
+                        )}
+                        <button
+                          onClick={() => setFilterRules(prev => [...prev, { field: 'tags', operator: 'has_tag', value: '' }])}
+                          className="w-full py-2 border-2 border-dashed border-purple-200 rounded-xl text-[10px] font-bold text-purple-400 hover:border-purple-400 hover:text-purple-600 transition-all flex items-center justify-center gap-1.5"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add Filter Rule
+                        </button>
+                      </div>
+                    )}
+                    {newBranchType === 'FALLBACK' && (
+                      <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-500 italic">
+                        Fallback route runs when no other branch matches. No filter needed.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ACTION Config */}
               {stepNodeType === 'ACTION' && (
@@ -1364,6 +1543,147 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Filter Editor Modal (for router branches) ────────── */}
+      {showFilterEditor && (
+        <div className="fixed inset-0 z-[150] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
+            <div className="p-5 bg-purple-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-purple-800 rounded-lg flex items-center justify-center">
+                  <Filter className="w-4 h-4 text-white" />
+                </div>
+                <h3 className="font-bold text-lg">Edit Route Filter</h3>
+              </div>
+              <button onClick={() => { setShowFilterEditor(false); setFilterEditStepId(null); }} className="p-2 hover:bg-purple-700 rounded-xl transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <p className="text-xs text-slate-500">Take this route if the following conditions are met:</p>
+
+              {filterRules.length > 1 && (
+                <div className="flex justify-end">
+                  <select
+                    value={filterLogic}
+                    onChange={(e) => setFilterLogic(e.target.value as 'AND' | 'OR')}
+                    className="text-xs font-bold bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5 text-purple-600"
+                  >
+                    <option value="AND">ALL rules must match (AND)</option>
+                    <option value="OR">ANY rule can match (OR)</option>
+                  </select>
+                </div>
+              )}
+
+              {filterRules.map((rule, ri) => (
+                <div key={ri} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Rule {ri + 1}</span>
+                    <button onClick={() => setFilterRules(prev => prev.filter((_, i) => i !== ri))} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <select
+                    value={rule.field}
+                    onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], field: e.target.value }; setFilterRules(r); }}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                  >
+                    <optgroup label="Contact">
+                      <option value="name">Name</option>
+                      <option value="email">Email</option>
+                      <option value="phone">Phone</option>
+                      <option value="status">Status</option>
+                      <option value="tags">Tags</option>
+                      <option value="notes">Notes</option>
+                      <option value="line_id">LINE ID</option>
+                      <option value="attended">Attended</option>
+                      <option value="purchased">Purchased</option>
+                    </optgroup>
+                    <optgroup label="Webinar">
+                      <option value="webinar_upcoming">Webinar is Upcoming</option>
+                      <option value="webinar_link">Webinar Link</option>
+                      <option value="webinar_date">Webinar Date</option>
+                    </optgroup>
+                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={rule.operator}
+                      onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], operator: e.target.value }; setFilterRules(r); }}
+                      className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                    >
+                      {rule.field === 'tags' ? (
+                        <>
+                          <option value="has_tag">Has tag</option>
+                          <option value="not_has_tag">Does not have tag</option>
+                          <option value="exists">Has any tags</option>
+                          <option value="not_exists">Has no tags</option>
+                        </>
+                      ) : ['attended', 'purchased'].includes(rule.field) ? (
+                        <option value="==">Equals</option>
+                      ) : (
+                        <>
+                          <option value="==">Equals</option>
+                          <option value="!=">Does not equal</option>
+                          <option value="contains">Contains</option>
+                          <option value="not_contains">Does not contain</option>
+                          <option value="exists">Exists (has value)</option>
+                          <option value="not_exists">Does not exist (empty)</option>
+                          <option value="starts_with">Starts with</option>
+                          <option value="ends_with">Ends with</option>
+                        </>
+                      )}
+                    </select>
+                    {!['exists', 'not_exists'].includes(rule.operator) && rule.field !== 'webinar_upcoming' && (
+                      ['attended', 'purchased'].includes(rule.field) ? (
+                        <select
+                          value={rule.value}
+                          onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], value: e.target.value }; setFilterRules(r); }}
+                          className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                        >
+                          <option value="true">True</option>
+                          <option value="false">False</option>
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={rule.value}
+                          onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], value: e.target.value }; setFilterRules(r); }}
+                          placeholder="value..."
+                          className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                        />
+                      )
+                    )}
+                  </div>
+                  {ri < filterRules.length - 1 && (
+                    <div className="flex justify-center pt-1">
+                      <span className="text-[9px] font-black text-purple-400 uppercase">{filterLogic}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <button
+                onClick={() => setFilterRules(prev => [...prev, { field: 'tags', operator: 'has_tag', value: '' }])}
+                className="w-full py-3 border-2 border-dashed border-purple-200 rounded-xl text-xs font-bold text-purple-400 hover:border-purple-400 hover:text-purple-600 transition-all flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Filter Rule
+              </button>
+
+              {filterRules.length === 0 && (
+                <p className="text-xs text-slate-400 italic text-center">No filter = this route always runs</p>
+              )}
+
+              <button
+                onClick={saveFilterForStep}
+                className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-purple-600/20 hover:bg-purple-700 transition-all"
+              >
+                Save Filter
+              </button>
             </div>
           </div>
         </div>
