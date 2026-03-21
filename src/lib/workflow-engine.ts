@@ -257,7 +257,7 @@ export async function executeWorkflowNode(
     await executeWorkflowNode(enrollmentId, nextStep.id);
   } else {
     // No more steps — mark completed
-    await supabase.from('workflow_enrollments').update({ status: 'completed' }).eq('id', enrollmentId).then(({ error }) => {
+    await supabase.from('workflow_enrollments').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', enrollmentId).then(({ error }) => {
       if (error) console.error(`[WorkflowEngine] Failed to mark enrollment completed:`, error.message);
     });
   }
