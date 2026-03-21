@@ -14,23 +14,44 @@ export async function GET(req: Request) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 2000);
     const offset = (page - 1) * limit;
 
-    let query = supabase
-      .from('contacts')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false });
+    // When fetchAll, paginate through all results to bypass Supabase's 1000 row limit
+    let contacts: any[] = [];
+    let count: number | null = null;
 
-    if (!fetchAll) {
-      query = query.range(offset, offset + limit - 1);
-    }
-
-    if (pendingFollowup) {
-      query = query.not('follow_up_at', 'is', null).lte('follow_up_at', new Date().toISOString());
-    }
-
-    const { data: contacts, error: contactError, count } = await query;
-
-    if (contactError) {
-      return NextResponse.json({ success: false, error: contactError.message }, { status: 500 });
+    if (fetchAll) {
+      const PAGE_SIZE = 1000;
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        let q = supabase
+          .from('contacts')
+          .select('*', { count: from === 0 ? 'exact' : undefined })
+          .order('created_at', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+        if (pendingFollowup) {
+          q = q.not('follow_up_at', 'is', null).lte('follow_up_at', new Date().toISOString());
+        }
+        const { data, error, count: c } = await q;
+        if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        if (c !== null && c !== undefined) count = c;
+        if (data) contacts = contacts.concat(data);
+        hasMore = (data?.length || 0) === PAGE_SIZE;
+        from += PAGE_SIZE;
+      }
+      if (count === null) count = contacts.length;
+    } else {
+      let q = supabase
+        .from('contacts')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (pendingFollowup) {
+        q = q.not('follow_up_at', 'is', null).lte('follow_up_at', new Date().toISOString());
+      }
+      const { data, error, count: c } = await q;
+      if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      contacts = data || [];
+      count = c;
     }
 
     const contactIds = contacts.map(c => c.id);
