@@ -8,7 +8,7 @@ import {
   Save, RefreshCw, Plus, Search, ChevronRight, ArrowLeft,
   Copy, Check, X, Filter, Loader2, AlertCircle, History,
   Send, Lock, Bell, Layout, List, Trash2, Megaphone, Pencil,
-  Table2, Upload, GitMerge, UserPlus, Zap, Inbox
+  Table2, Upload, GitMerge, UserPlus, Zap, Inbox, ChevronUp, ChevronDown
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import WorkflowBuilder from "@/components/WorkflowBuilder";
@@ -2591,6 +2591,46 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   const [wbDaysBefore, setWbDaysBefore] = useState(6);
   const [wbSendHour, setWbSendHour] = useState(9);
   const [wbMessage, setWbMessage] = useState('');
+  const [wbBlocks, setWbBlocks] = useState<Array<{ type: 'text' | 'image' | 'video'; content: string }>>([{ type: 'text', content: '' }]);
+
+  // Convert blocks array → single message string for storage
+  const blocksToMessage = (blocks: Array<{ type: string; content: string }>) => {
+    return blocks.map(b => {
+      if (b.type === 'image') return `[image:${b.content}]`;
+      if (b.type === 'video') return `[video:${b.content}]`;
+      return b.content;
+    }).join('\n');
+  };
+
+  // Convert stored message string → blocks array for editing
+  const messageToBlocks = (msg: string): Array<{ type: 'text' | 'image' | 'video'; content: string }> => {
+    if (!msg) return [{ type: 'text', content: '' }];
+    const lines = msg.split('\n');
+    const blocks: Array<{ type: 'text' | 'image' | 'video'; content: string }> = [];
+    let textBuffer: string[] = [];
+
+    const flushText = () => {
+      const text = textBuffer.join('\n');
+      if (text.trim() || blocks.length === 0) blocks.push({ type: 'text', content: text });
+      textBuffer = [];
+    };
+
+    for (const line of lines) {
+      const imageMatch = line.trim().match(/^\[image:(.+)\]$/i);
+      const videoMatch = line.trim().match(/^\[video:(.+)\]$/i);
+      if (imageMatch) {
+        flushText();
+        blocks.push({ type: 'image', content: imageMatch[1] });
+      } else if (videoMatch) {
+        flushText();
+        blocks.push({ type: 'video', content: videoMatch[1] });
+      } else {
+        textBuffer.push(line);
+      }
+    }
+    if (textBuffer.length > 0) flushText();
+    return blocks.length > 0 ? blocks : [{ type: 'text', content: '' }];
+  };
   const [wbEditingStep, setWbEditingStep] = useState<any>(null);
   const [wbSaving, setWbSaving] = useState(false);
   const [wbTestLineId, setWbTestLineId] = useState('Uf8d4d01181381069f563e23504dc6dce');
@@ -3306,7 +3346,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                   <h3 className="font-bold text-slate-800">Reminder Steps</h3>
                   <p className="text-xs text-slate-400 mt-0.5">Messages sent based on days before the webinar. Supports: {'{{name}}'}, {'{{webinar_date}}'}, {'{{webinar_link}}'}</p>
                 </div>
-                <button onClick={() => { setWbStepForm(true); setWbEditingStep(null); setWbDaysBefore(6); setWbSendHour(9); setWbMessage(''); }}
+                <button onClick={() => { setWbStepForm(true); setWbEditingStep(null); setWbDaysBefore(6); setWbSendHour(9); setWbMessage(''); setWbBlocks([{ type: 'text', content: '' }]); }}
                   className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">
                   <Plus className="w-4 h-4" /><span>Add Step</span>
                 </button>
@@ -3336,11 +3376,96 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 font-medium">Message</label>
-                    <textarea rows={5} value={wbMessage} onChange={e => setWbMessage(e.target.value)}
-                      placeholder={"Hi {{name}}! 👋 Just a reminder — our webinar is on {{webinar_date}}.\n\nJoin here: {{webinar_link}}"}
-                      className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none font-mono" />
+                    <label className="text-xs text-slate-500 font-medium">Message Blocks</label>
+                    <p className="text-[10px] text-slate-400 mb-2">Add multiple blocks — each becomes a separate LINE message bubble (max 5). Sent in order top to bottom.</p>
+                    <div className="space-y-2">
+                      {wbBlocks.map((block, idx) => (
+                        <div key={idx} className="bg-white border border-slate-200 rounded-lg p-3 space-y-2 relative">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">#{idx + 1}</span>
+                              <select value={block.type} onChange={e => {
+                                const updated = [...wbBlocks];
+                                updated[idx] = { type: e.target.value as 'text' | 'image' | 'video', content: '' };
+                                setWbBlocks(updated);
+                                setWbMessage(blocksToMessage(updated));
+                              }} className="text-xs border border-slate-300 rounded px-2 py-1 bg-white font-medium">
+                                <option value="text">Text</option>
+                                <option value="image">Image</option>
+                                <option value="video">Video</option>
+                              </select>
+                            </div>
+                            {wbBlocks.length > 1 && (
+                              <div className="flex items-center space-x-1">
+                                {idx > 0 && (
+                                  <button onClick={() => { const updated = [...wbBlocks]; [updated[idx-1], updated[idx]] = [updated[idx], updated[idx-1]]; setWbBlocks(updated); setWbMessage(blocksToMessage(updated)); }}
+                                    className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="Move up">
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {idx < wbBlocks.length - 1 && (
+                                  <button onClick={() => { const updated = [...wbBlocks]; [updated[idx], updated[idx+1]] = [updated[idx+1], updated[idx]]; setWbBlocks(updated); setWbMessage(blocksToMessage(updated)); }}
+                                    className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="Move down">
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                <button onClick={() => { const updated = wbBlocks.filter((_, i) => i !== idx); setWbBlocks(updated); setWbMessage(blocksToMessage(updated)); }}
+                                  className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded" title="Remove block">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {block.type === 'text' ? (
+                            <textarea rows={4} value={block.content} onChange={e => {
+                              const updated = [...wbBlocks];
+                              updated[idx] = { ...block, content: e.target.value };
+                              setWbBlocks(updated);
+                              setWbMessage(blocksToMessage(updated));
+                            }} placeholder={"Hi {{name}}! Just a reminder — our webinar is on {{webinar_date}}.\n\nJoin here: {{webinar_link}}"}
+                              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none font-mono" />
+                          ) : block.type === 'image' ? (
+                            <div>
+                              <input type="text" value={block.content} onChange={e => {
+                                const updated = [...wbBlocks];
+                                updated[idx] = { ...block, content: e.target.value };
+                                setWbBlocks(updated);
+                                setWbMessage(blocksToMessage(updated));
+                              }} placeholder="https://example.com/image.jpg"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                              {block.content && <div className="mt-2 rounded-lg overflow-hidden border border-slate-200 max-w-[200px]"><img src={block.content} alt="preview" className="w-full h-auto" onError={e => (e.target as HTMLImageElement).style.display = 'none'} /></div>}
+                            </div>
+                          ) : (
+                            <div>
+                              <input type="text" value={block.content.split('|')[0] || ''} onChange={e => {
+                                const updated = [...wbBlocks];
+                                const preview = block.content.split('|')[1] || '';
+                                updated[idx] = { ...block, content: preview ? `${e.target.value}|${preview}` : e.target.value };
+                                setWbBlocks(updated);
+                                setWbMessage(blocksToMessage(updated));
+                              }} placeholder="https://example.com/video.mp4"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                              <input type="text" value={block.content.split('|')[1] || ''} onChange={e => {
+                                const updated = [...wbBlocks];
+                                const videoUrl = block.content.split('|')[0] || '';
+                                updated[idx] = { ...block, content: e.target.value ? `${videoUrl}|${e.target.value}` : videoUrl };
+                                setWbBlocks(updated);
+                                setWbMessage(blocksToMessage(updated));
+                              }} placeholder="https://example.com/thumbnail.jpg (preview image)"
+                                className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono text-slate-500" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {wbBlocks.length < 5 && (
+                      <button onClick={() => { const updated = [...wbBlocks, { type: 'text' as const, content: '' }]; setWbBlocks(updated); setWbMessage(blocksToMessage(updated)); }}
+                        className="mt-2 flex items-center space-x-1 text-xs text-blue-600 font-semibold hover:text-blue-700">
+                        <Plus className="w-3.5 h-3.5" /><span>Add Block</span>
+                      </button>
+                    )}
                     <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="text-[10px] text-slate-400 mr-1">Variables (click to copy):</span>
                       {['{{name}}','{{webinar_link}}','{{webinar_date}}','{{email}}','{{phone}}','{{status}}','{{tags}}','{{notes}}','{{uid}}','{{follow_up_note}}'].map(v => (
                         <button key={v} onClick={async () => { await navigator.clipboard.writeText(v); setCopiedVar(v); setTimeout(() => setCopiedVar(null), 1200); }}
                           className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-mono border transition-all ${copiedVar === v ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100'}`}>
@@ -3416,7 +3541,25 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                         <span className="text-2xl font-black text-blue-600">D-{step.days_before}</span>
                         <p className="text-xs text-slate-400">{step.send_hour}:00</p>
                       </div>
-                      <p className="flex-1 text-sm text-slate-700 whitespace-pre-wrap">{step.message}</p>
+                      <div className="flex-1 space-y-1.5">
+                        {messageToBlocks(step.message).map((blk: { type: string; content: string }, bi: number) => (
+                          <div key={bi}>
+                            {blk.type === 'text' ? (
+                              <p className="text-sm text-slate-700 whitespace-pre-wrap">{blk.content}</p>
+                            ) : blk.type === 'image' ? (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">IMAGE</span>
+                                <span className="text-xs text-slate-400 font-mono truncate max-w-[300px]">{blk.content}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">VIDEO</span>
+                                <span className="text-xs text-slate-400 font-mono truncate max-w-[300px]">{blk.content.split('|')[0]}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                       <div className="flex space-x-1 flex-shrink-0">
                         <button
                           disabled={wbTestingStepId === step.id}
@@ -3439,7 +3582,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                         >
                           {wbTestingStepId === step.id ? '…' : 'Test'}
                         </button>
-                        <button onClick={() => { setWbEditingStep(step); setWbDaysBefore(step.days_before); setWbSendHour(step.send_hour); setWbMessage(step.message); setWbStepForm(true); }}
+                        <button onClick={() => { setWbEditingStep(step); setWbDaysBefore(step.days_before); setWbSendHour(step.send_hour); setWbMessage(step.message); setWbBlocks(messageToBlocks(step.message)); setWbStepForm(true); }}
                           className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit step">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
