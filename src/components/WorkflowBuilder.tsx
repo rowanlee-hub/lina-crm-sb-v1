@@ -1030,27 +1030,44 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                       onChange={(e) => setCondField(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
                     >
+                      <option value="webinar_upcoming">Webinar Link is Upcoming</option>
+                      <option value="has_webinar_link">Has Webinar Link</option>
                       <option value="attended">Attended Webinar</option>
                       <option value="purchased">Product Purchased</option>
                       <option value="tags">Has Tag</option>
                       <option value="status">Status</option>
                     </select>
                   </div>
-                  <div className="flex space-x-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={condOp}
-                      className="w-16 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-center"
-                    />
-                    <input
-                      type="text"
-                      value={condVal}
-                      onChange={(e) => setCondVal(e.target.value)}
-                      placeholder="true"
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
+                  {/* Hide operator/value for built-in checks that don't need them */}
+                  {condField !== 'webinar_upcoming' && condField !== 'has_webinar_link' && (
+                    <div className="flex space-x-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={condOp}
+                        className="w-16 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-center"
+                      />
+                      <input
+                        type="text"
+                        value={condVal}
+                        onChange={(e) => setCondVal(e.target.value)}
+                        placeholder="true"
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                  )}
+                  {condField === 'webinar_upcoming' && (
+                    <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700">
+                      <strong>YES</strong> = contact has a webinar link AND the webinar date is today or in the future<br />
+                      <strong>NO</strong> = no link, no date, or date has passed (expired)
+                    </div>
+                  )}
+                  {condField === 'has_webinar_link' && (
+                    <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700">
+                      <strong>YES</strong> = contact has a webinar link set<br />
+                      <strong>NO</strong> = no webinar link
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -82,13 +82,37 @@ async function evaluateCondition(step: any, contact: any): Promise<boolean> {
 
   console.log(`[WorkflowEngine] Evaluating condition: ${field} (${val}) ${config.operator} ${target}`);
 
+  // ─── Webinar upcoming check ───────────────────────────────
+  // YES = webinar_date exists AND is today or in the future AND webinar_link exists
+  // NO = no date, past date, or no link
+  if (field === 'webinar_upcoming') {
+    const webinarDate = contact.webinar_date;
+    const webinarLink = contact.webinar_link;
+    if (!webinarDate || !webinarLink) {
+      console.log(`[WorkflowEngine] webinar_upcoming: NO (missing date or link)`);
+      return false;
+    }
+    const today = new Date().toISOString().substring(0, 10);
+    const dateStr = String(webinarDate).substring(0, 10);
+    const isUpcoming = dateStr >= today;
+    console.log(`[WorkflowEngine] webinar_upcoming: ${isUpcoming ? 'YES' : 'NO'} (date=${dateStr}, today=${today})`);
+    return isUpcoming;
+  }
+
+  // ─── Has webinar link check ───────────────────────────────
+  if (field === 'has_webinar_link') {
+    const hasLink = !!contact.webinar_link;
+    console.log(`[WorkflowEngine] has_webinar_link: ${hasLink}`);
+    return hasLink;
+  }
+
   if (config.operator === '==') {
     // Handle boolean strings from UI
     if (target === 'true') return val === true;
     if (target === 'false') return val === false;
     return String(val) === String(target);
   }
-  
+
   // Tag check
   if (field === 'tags') {
     const tags = contact.tags || [];
