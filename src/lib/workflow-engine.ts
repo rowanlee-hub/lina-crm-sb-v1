@@ -152,40 +152,97 @@ export async function executeWorkflowNode(
 
   // Handle ACTION (Send Message / Tag)
   if (step.node_type === 'ACTION' || !step.node_type) {
-    // Determine scheduling
-    let sendAt = new Date();
-    
-    // Support legacy Day-of-Week scheduling
-    if (step.day_of_week !== null && step.send_time) {
-      const scheduled = calculateScheduledTime(new Date(), step.day_of_week, step.send_time);
-      if (scheduled) sendAt = scheduled;
-    }
+    // Check if this is a delayed/scheduled action
+    const isScheduled = step.action_type === 'SCHEDULE_MESSAGE' && step.schedule_config?.scheduled_at;
+    const isLegacyScheduled = step.day_of_week !== null && step.day_of_week !== undefined && step.send_time;
 
-    // Queue the action
-    const actionPayload: any = {
-      contact_id: contact.id,
-      enrollment_id: enrollmentId,
-      step_id: step.id,
-      scheduled_at: sendAt.toISOString(),
-      status: 'queued'
-    };
-
-    if (step.action_type === 'SEND_MESSAGE') {
-      actionPayload.message = renderTemplate(step.message_template, contact);
-    } else if (step.action_type === 'SCHEDULE_MESSAGE') {
-      actionPayload.message = renderTemplate(step.message_template, contact);
-      if (step.schedule_config?.scheduled_at) {
-        actionPayload.scheduled_at = new Date(step.schedule_config.scheduled_at).toISOString();
+    if (isScheduled || isLegacyScheduled) {
+      // ─── DELAYED: Queue for cron ─────────────────────────────
+      let sendAt = new Date();
+      if (isScheduled) {
+        sendAt = new Date(step.schedule_config.scheduled_at);
+      } else if (isLegacyScheduled) {
+        const scheduled = calculateScheduledTime(new Date(), step.day_of_week, step.send_time);
+        if (scheduled) sendAt = scheduled;
       }
-    } else if (step.action_type === 'ENROLL_WORKFLOW') {
-      actionPayload.message = `__ACTION__:ENROLL_WORKFLOW:${step.action_value}`;
-    } else if (step.action_type === 'REMOVE_FROM_WORKFLOW') {
-      actionPayload.message = `__ACTION__:REMOVE_FROM_WORKFLOW:${step.action_value}`;
-    } else {
-      actionPayload.message = `__ACTION__:${step.action_type}:${step.action_value}`;
+      await supabase.from('message_queue').insert({
+        contact_id: contact.id,
+        enrollment_id: enrollmentId,
+        step_id: step.id,
+        scheduled_at: sendAt.toISOString(),
+        status: 'queued',
+        message: renderTemplate(step.message_template || '', contact),
+      });
+      // Cron will handle next step after sending
+      return;
     }
 
-    await supabase.from('message_queue').insert(actionPayload);
+    // ─── IMMEDIATE: Execute now ──────────────────────────────
+    let success = false;
+    const logAction = `[Workflow]`;
+
+    try {
+      if (step.action_type === 'SEND_MESSAGE') {
+        const rendered = renderTemplate(step.message_template || '', contact);
+        const lineId = contact.line_id;
+        const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+        if (lineId && token) {
+          const res = await fetch('https://api.line.me/v2/bot/message/push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ to: lineId, messages: [{ type: 'text', text: rendered }] }),
+          });
+          success = res.ok;
+          if (!res.ok) console.error(`[WorkflowEngine] LINE send failed:`, await res.text());
+        } else {
+          console.error(`[WorkflowEngine] Cannot send message: no line_id or token`);
+        }
+        // Log to history
+        await supabase.from('contact_history').insert({ contact_id: contact.id, action: `Chat: ${logAction} ${rendered}` });
+        // Also log to message_queue for audit trail
+        await supabase.from('message_queue').insert({
+          contact_id: contact.id, enrollment_id: enrollmentId, step_id: step.id,
+          scheduled_at: new Date().toISOString(), sent_at: new Date().toISOString(),
+          status: success ? 'sent' : 'failed', message: rendered,
+        });
+
+      } else if (step.action_type === 'ADD_TAG') {
+        const tag = step.action_value;
+        const currentTags = contact.tags || [];
+        if (!currentTags.includes(tag)) {
+          await supabase.from('contacts').update({ tags: [...currentTags, tag] }).eq('id', contact.id);
+          await supabase.from('contact_history').insert({ contact_id: contact.id, action: `Tag Added ${logAction}: ${tag}` });
+        }
+        success = true;
+
+      } else if (step.action_type === 'REMOVE_TAG') {
+        const tag = step.action_value;
+        const currentTags = contact.tags || [];
+        const newTags = currentTags.filter((t: string) => t !== tag);
+        await supabase.from('contacts').update({ tags: newTags }).eq('id', contact.id);
+        await supabase.from('contact_history').insert({ contact_id: contact.id, action: `Tag Removed ${logAction}: ${tag}` });
+        success = true;
+
+      } else if (step.action_type === 'ENROLL_WORKFLOW') {
+        await enrollContactInWorkflow(step.action_value, contact.id);
+        await supabase.from('contact_history').insert({ contact_id: contact.id, action: `Workflow Enrolled ${logAction}: ${step.action_value}` });
+        success = true;
+
+      } else if (step.action_type === 'REMOVE_FROM_WORKFLOW') {
+        const { data: enrollments } = await supabase.from('workflow_enrollments').select('id').eq('workflow_id', step.action_value).eq('contact_id', contact.id).eq('status', 'active');
+        for (const e of enrollments || []) {
+          await supabase.from('workflow_enrollments').update({ status: 'cancelled' }).eq('id', e.id);
+          await supabase.from('workflow_waiting').delete().eq('enrollment_id', e.id);
+          await supabase.from('message_queue').update({ status: 'cancelled' }).eq('enrollment_id', e.id).eq('status', 'queued');
+        }
+        await supabase.from('contact_history').insert({ contact_id: contact.id, action: `Workflow Removed ${logAction}: ${step.action_value}` });
+        success = true;
+      }
+    } catch (err) {
+      console.error(`[WorkflowEngine] Action execution error:`, err);
+    }
+
+    console.log(`[WorkflowEngine] Action ${step.action_type} for contact ${contact.id}: ${success ? 'OK' : 'FAILED'}`);
   }
 
   // Move to next step (DEFAULT path)
@@ -196,7 +253,9 @@ export async function executeWorkflowNode(
     .eq('branch_type', 'DEFAULT')
     .single();
 
-  if (!nextStep) {
+  if (nextStep) {
+    await executeWorkflowNode(enrollmentId, nextStep.id);
+  } else {
     // No more steps — mark completed
     await supabase.from('workflow_enrollments').update({ status: 'completed' }).eq('id', enrollmentId).then(({ error }) => {
       if (error) console.error(`[WorkflowEngine] Failed to mark enrollment completed:`, error.message);
