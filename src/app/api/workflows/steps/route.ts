@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const { data, error } = await supabase.from('workflow_steps').insert({
+    const insertPayload: Record<string, unknown> = {
       workflow_id: body.workflow_id,
       parent_id: body.parent_id,
       branch_type: body.branch_type || 'DEFAULT',
@@ -47,11 +47,14 @@ export async function POST(req: Request) {
       action_type: body.action_type || 'SEND_MESSAGE',
       message_template: body.message_template || '',
       action_value: body.action_value || '',
-      wait_config: body.wait_config,
-      condition_config: body.condition_config,
-      schedule_config: body.schedule_config,
-      position: body.position
-    }).select().single();
+      position_x: body.position_x || 0,
+      position_y: body.position_y || 0,
+    };
+    if (body.wait_config) insertPayload.wait_config = body.wait_config;
+    if (body.condition_config) insertPayload.condition_config = body.condition_config;
+    if (body.schedule_config) insertPayload.schedule_config = body.schedule_config;
+
+    const { data, error } = await supabase.from('workflow_steps').insert(insertPayload).select().single();
 
     if (error) throw error;
     return NextResponse.json({ success: true, step: data });
