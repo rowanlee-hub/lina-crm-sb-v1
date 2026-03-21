@@ -64,6 +64,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const { id, ...updates } = await req.json();
+    if (!id) throw new Error('id is required');
     const { error } = await supabase.from('workflows').update(updates).eq('id', id);
     if (error) throw error;
     return NextResponse.json({ success: true });

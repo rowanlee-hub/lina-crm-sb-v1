@@ -10,10 +10,8 @@ import {
   Send, Lock, Bell, Layout, List, Trash2, Megaphone, Pencil,
   Table2, Upload, GitMerge, UserPlus, Zap, Inbox
 } from "lucide-react";
-import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
-
-const WorkflowBuilder = dynamic(() => import("@/components/WorkflowBuilder"), { ssr: false });
+import WorkflowBuilder from "@/components/WorkflowBuilder";
 
 // ============================================================================
 // BACKEND URLS
@@ -2822,6 +2820,9 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
 
   // ─── WORKFLOW DETAIL VIEW ────────────────────────────────
   if (selectedWf) {
+    if (stepsLoading) {
+      return <div className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
+    }
     return (
       <WorkflowBuilder
         workflow={selectedWf}

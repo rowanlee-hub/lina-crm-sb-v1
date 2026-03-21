@@ -219,7 +219,14 @@ export async function enrollContactInWorkflow(
   const { data: workflow } = await supabase.from('workflows').select('*').eq('id', workflowId).single();
   const { data: contact } = await supabase.from('contacts').select('*').eq('id', contactId).single();
 
-  if (!workflow || !workflow.is_active || !contact || !contact.line_id) return;
+  if (!workflow || !contact) {
+    console.error(`[WorkflowEngine] Workflow or contact not found: workflowId=${workflowId} contactId=${contactId}`);
+    return;
+  }
+  if (!workflow.is_active) {
+    console.log(`[WorkflowEngine] Workflow ${workflowId} is inactive, skipping enrollment`);
+    return;
+  }
 
   const now = new Date();
   const currentWeek = getISOWeek(now);
@@ -241,7 +248,6 @@ export async function enrollContactInWorkflow(
     .insert({
       workflow_id: workflowId,
       contact_id: contactId,
-      webinar_week: currentWeek,
       status: 'active'
     })
     .select()
@@ -264,7 +270,7 @@ export async function enrollContactInWorkflow(
   }
 
   // Update contact metadata
-  await supabase.from('contacts').update({ signup_day: now.getDay(), webinar_week: currentWeek }).eq('id', contactId);
+  await supabase.from('contacts').update({ signup_day: now.getDay() }).eq('id', contactId);
 
   // Log history
   await supabase.from('contact_history').insert({
