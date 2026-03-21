@@ -66,15 +66,10 @@ export async function GET() {
     if (queuedMessages && queuedMessages.length > 0) {
       for (const msg of queuedMessages) {
         const lineId = (msg as any).contacts?.line_id;
-        if (!lineId) {
-          await supabase.from('message_queue').update({ status: 'failed', sent_at: now }).eq('id', msg.id);
-          totalFailed++;
-          continue;
-        }
 
         let actionSuccess = false;
 
-        // Tag Action
+        // Handle non-LINE actions first (these don't need line_id)
         if (msg.message.startsWith('__ACTION__:')) {
           const parts = msg.message.split(':');
           const actionType = parts[1]; 
@@ -103,6 +98,12 @@ export async function GET() {
           }
           actionSuccess = true;
         } else {
+          // LINE message — requires line_id
+          if (!lineId) {
+            await supabase.from('message_queue').update({ status: 'failed', sent_at: now }).eq('id', msg.id);
+            totalFailed++;
+            continue;
+          }
           // Render {{variables}} then send
           const { renderMessageSync } = await import('@/lib/render-message');
           const contact = (msg as any).contacts ?? {};

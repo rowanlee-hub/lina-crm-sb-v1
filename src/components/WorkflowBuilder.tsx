@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import {
   X, Plus, MessageCircle, Filter, Clock,
   Trash2, Save, Check, Zap, Edit2,
-  ChevronDown, ArrowDown,
+  ChevronDown, ArrowDown, Activity, RefreshCw,
+  CheckCircle2, XCircle, Clock3, AlertCircle,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -258,6 +259,11 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
 
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showTriggerForm, setShowTriggerForm] = useState(false);
+  const [viewTab, setViewTab] = useState<'flow' | 'logs'>('flow');
+
+  // Execution logs
+  const [logs, setLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   // Step form state
   const [showStepForm, setShowStepForm] = useState(false);
@@ -288,6 +294,24 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
       })
       .catch(() => {});
   }, [workflow.id]);
+
+  // Load logs when switching to logs tab
+  const fetchLogs = async () => {
+    setLogsLoading(true);
+    try {
+      const res = await fetch(`/api/workflows/logs?workflowId=${workflow.id}`);
+      const data = await res.json();
+      setLogs(Array.isArray(data) ? data : []);
+    } catch {
+      setLogs([]);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewTab === 'logs') fetchLogs();
+  }, [viewTab]);
 
   // ─── Form helpers ───────────────────────────────────────────────
 
@@ -494,23 +518,40 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
             )}
             <Edit2 className="w-3 h-3 text-slate-300 group-hover:text-blue-400 transition-colors" />
           </button>
-          <button
-            onClick={saveWorkflow}
-            disabled={savingWf}
-            className={`px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
-              savedWf
-                ? 'bg-emerald-500 text-white'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-          >
-            {savedWf ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
-            <span>{savedWf ? 'Saved' : savingWf ? 'Saving...' : 'Save'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex bg-slate-100 p-0.5 rounded-lg">
+              <button
+                onClick={() => setViewTab('flow')}
+                className={`px-3 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewTab === 'flow' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+              >
+                Flow
+              </button>
+              <button
+                onClick={() => setViewTab('logs')}
+                className={`px-3 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewTab === 'logs' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+              >
+                <Activity className="w-3 h-3" />
+                Logs
+              </button>
+            </div>
+            <button
+              onClick={saveWorkflow}
+              disabled={savingWf}
+              className={`px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
+                savedWf
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
+            >
+              {savedWf ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+              <span>{savedWf ? 'Saved' : savingWf ? 'Saving...' : 'Save'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Vertical Flow */}
-      <div className="flex-1 overflow-y-auto">
+      {viewTab === 'flow' && <div className="flex-1 overflow-y-auto">
         <div className="max-w-lg mx-auto py-8 px-4">
 
           {/* Trigger Card */}
@@ -562,7 +603,114 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
             </div>
           )}
         </div>
-      </div>
+      </div>}
+
+      {/* Execution Logs */}
+      {viewTab === 'logs' && (
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto py-6 px-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-sm font-bold text-slate-900">Execution History</h2>
+              <button
+                onClick={fetchLogs}
+                disabled={logsLoading}
+                className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 bg-slate-100 rounded-lg flex items-center gap-1.5 transition-all"
+              >
+                <RefreshCw className={`w-3 h-3 ${logsLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
+
+            {logsLoading && logs.length === 0 && (
+              <div className="text-center py-16">
+                <RefreshCw className="w-6 h-6 animate-spin text-slate-300 mx-auto" />
+                <p className="text-sm text-slate-400 mt-3">Loading logs...</p>
+              </div>
+            )}
+
+            {!logsLoading && logs.length === 0 && (
+              <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-3xl">
+                <Activity className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-slate-400 font-bold text-sm mt-3">No executions yet</p>
+                <p className="text-slate-300 text-xs mt-1">Trigger this workflow to see execution logs here</p>
+              </div>
+            )}
+
+            {logs.map((enrollment: any) => (
+              <div key={enrollment.id} className="mb-4 bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                {/* Enrollment header */}
+                <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      enrollment.status === 'active' ? 'bg-emerald-500 animate-pulse' :
+                      enrollment.status === 'completed' ? 'bg-blue-500' :
+                      'bg-slate-300'
+                    }`} />
+                    <span className="text-sm font-bold text-slate-900">{enrollment.contact_name}</span>
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${
+                      enrollment.status === 'active' ? 'bg-emerald-100 text-emerald-600' :
+                      enrollment.status === 'completed' ? 'bg-blue-100 text-blue-600' :
+                      'bg-slate-100 text-slate-500'
+                    }`}>
+                      {enrollment.status}
+                    </span>
+                    {!enrollment.contact_line_id && (
+                      <span className="text-[9px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">No LINE ID</span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {enrollment.started_at ? new Date(enrollment.started_at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' }) : ''}
+                  </span>
+                </div>
+
+                {/* Step logs */}
+                {enrollment.steps && enrollment.steps.length > 0 ? (
+                  <div className="divide-y divide-slate-50">
+                    {enrollment.steps.map((step: any) => (
+                      <div key={step.id} className="px-4 py-2.5 flex items-center gap-3">
+                        {step.status === 'sent' ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                        ) : step.status === 'failed' ? (
+                          <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                        ) : step.status === 'cancelled' ? (
+                          <XCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        ) : (
+                          <Clock3 className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                              {step.action_type || step.step_type}
+                            </span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                              step.status === 'sent' ? 'bg-emerald-50 text-emerald-600' :
+                              step.status === 'failed' ? 'bg-red-50 text-red-600' :
+                              step.status === 'queued' ? 'bg-amber-50 text-amber-600' :
+                              'bg-slate-50 text-slate-500'
+                            }`}>
+                              {step.status}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 mt-0.5 truncate">{step.description}</p>
+                        </div>
+                        <span className="text-[10px] text-slate-400 flex-shrink-0">
+                          {step.executed_at
+                            ? new Date(step.executed_at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit' })
+                            : step.scheduled_at
+                            ? `Sched: ${new Date(step.scheduled_at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit' })}`
+                            : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-4 py-3 text-xs text-slate-400 italic">No step executions recorded</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ─── Unsaved Changes Dialog ────────────────────────────── */}
       {showUnsavedDialog && (
