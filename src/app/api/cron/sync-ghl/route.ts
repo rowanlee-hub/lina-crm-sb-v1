@@ -41,17 +41,14 @@ function webinarDateFromTags(tags: string[]): string | null {
 
 async function fetchGHLContacts(updatedAfter?: string): Promise<any[]> {
   const all: any[] = [];
-  let startAfterId: string | undefined;
-  let hasMore = true;
+  let nextPageUrl: string | null = `${GHL_API}/contacts/?locationId=${GHL_LOCATION_ID}&limit=100`;
 
-  while (hasMore) {
-    const params = new URLSearchParams({
-      locationId: GHL_LOCATION_ID,
-      limit: '100',
-    });
-    if (startAfterId) params.set('startAfterId', startAfterId);
+  while (nextPageUrl) {
+    const fetchUrl: string = nextPageUrl;
+    nextPageUrl = null;
 
-    const resp = await fetch(`${GHL_API}/contacts/?${params}`, {
+    console.log('GHL Sync: fetching', fetchUrl);
+    const resp: Response = await fetch(fetchUrl, {
       headers: {
         Authorization: `Bearer ${GHL_TOKEN}`,
         Version: '2021-07-28',
@@ -60,31 +57,36 @@ async function fetchGHLContacts(updatedAfter?: string): Promise<any[]> {
     });
 
     if (!resp.ok) {
-      console.error('GHL API error:', resp.status, await resp.text());
+      const errText = await resp.text();
+      console.error('GHL API error:', resp.status, errText);
       break;
     }
 
     const data = await resp.json();
     const contacts = data.contacts || [];
+    const meta = data.meta || {};
+    console.log(`GHL Sync: page returned ${contacts.length} contacts (total: ${meta.total})`);
 
     // Filter by dateUpdated if we only want recent changes
     if (updatedAfter) {
       const cutoff = new Date(updatedAfter).getTime();
+      let foundOlder = false;
       for (const c of contacts) {
         if (new Date(c.dateUpdated).getTime() >= cutoff) {
           all.push(c);
+        } else {
+          foundOlder = true;
         }
       }
+      // GHL returns contacts sorted by dateUpdated desc
+      // Once we find contacts older than cutoff, stop paginating
+      if (foundOlder) break;
     } else {
       all.push(...contacts);
     }
 
-    // GHL pagination: if we got fewer than limit, no more pages
-    if (contacts.length < 100) {
-      hasMore = false;
-    } else {
-      startAfterId = contacts[contacts.length - 1].id;
-    }
+    // Use GHL's nextPageUrl for pagination
+    nextPageUrl = meta.nextPageUrl || null;
   }
 
   return all;
