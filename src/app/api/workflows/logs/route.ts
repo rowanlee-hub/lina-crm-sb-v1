@@ -17,8 +17,8 @@ export async function GET(req: Request) {
     // 1. Fetch enrollments
     let enrollQuery = supabase
       .from('workflow_enrollments')
-      .select('id, workflow_id, contact_id, status, created_at, completed_at, contacts(name, line_id), workflows(name)')
-      .order('created_at', { ascending: false })
+      .select('*, contacts(name, line_id), workflows(name)')
+      .order('id', { ascending: false })
       .limit(limit);
 
     if (workflowId) {
@@ -102,8 +102,8 @@ export async function GET(req: Request) {
       contact_name: e.contacts?.name || 'Unknown',
       contact_line_id: e.contacts?.line_id || null,
       status: e.status,
-      started_at: e.created_at,
-      completed_at: e.completed_at,
+      started_at: e.created_at || e.started_at || null,
+      completed_at: e.completed_at || null,
       steps: logs.filter((l: any) => l.enrollment_id === e.id),
     }));
 

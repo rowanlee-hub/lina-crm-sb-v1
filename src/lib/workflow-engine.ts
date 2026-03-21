@@ -196,15 +196,11 @@ export async function executeWorkflowNode(
     .eq('branch_type', 'DEFAULT')
     .single();
 
-  if (nextStep) {
-    // If it was an immediate transition (no scheduling), recurse. 
-    // Otherwise, the cron will handle the completion of the current step and trigger the next one.
-    // Actually, we'll let the cron dispatch trigger the next node once the current one is "Sent"
-    // Track progress (non-critical — don't block if column missing)
-    await supabase.from('workflow_enrollments').update({ updated_at: new Date().toISOString() }).eq('id', enrollmentId);
-  } else {
-    // No more steps
-    await supabase.from('workflow_enrollments').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', enrollmentId);
+  if (!nextStep) {
+    // No more steps — mark completed
+    await supabase.from('workflow_enrollments').update({ status: 'completed' }).eq('id', enrollmentId).then(({ error }) => {
+      if (error) console.error(`[WorkflowEngine] Failed to mark enrollment completed:`, error.message);
+    });
   }
 }
 

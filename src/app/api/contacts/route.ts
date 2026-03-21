@@ -204,7 +204,7 @@ export async function POST(req: Request) {
         }
         // Trigger automations
         const { processAutomations } = await import('@/lib/automation-engine');
-        processAutomations('TAG_ADDED', tag, contact.id, contact.lineId);
+        processAutomations('TAG_ADDED', tag, contact.id, lineId);
       }
 
       // Save latest history item if provided

@@ -11,8 +11,8 @@ export async function GET(req: Request) {
 
     let query = supabase
       .from('workflow_enrollments')
-      .select('id, workflow_id, contact_id, status, created_at, completed_at, workflows(id, name)')
-      .order('created_at', { ascending: false });
+      .select('*, workflows(id, name)')
+      .order('id', { ascending: false });
 
     if (contactId) {
       query = query.eq('contact_id', contactId);
