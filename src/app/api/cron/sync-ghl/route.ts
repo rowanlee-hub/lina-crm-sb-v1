@@ -41,7 +41,7 @@ function webinarDateFromTags(tags: string[]): string | null {
 
 async function fetchGHLContacts(updatedAfter?: string): Promise<any[]> {
   const all: any[] = [];
-  let nextPageUrl: string | null = `${GHL_API}/contacts/?locationId=${GHL_LOCATION_ID}&limit=100`;
+  let nextPageUrl: string | null = `${GHL_API}/contacts/?locationId=${GHL_LOCATION_ID}&limit=100&sortBy=date_updated&order=desc`;
 
   while (nextPageUrl) {
     const fetchUrl: string = nextPageUrl;
@@ -167,6 +167,7 @@ export async function GET(req: Request) {
           skipped++;
           continue;
         }
+        console.log(`GHL Sync [${email}]: updating —`, JSON.stringify(Object.keys(patch).filter(k => k !== 'updated_at')));
 
         await supabase.from('contacts').update(patch).eq('id', existing.id);
 
