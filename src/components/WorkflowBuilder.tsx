@@ -627,18 +627,42 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
               children.sort((a, b) => a.step_order - b.step_order);
             }
 
-            const BRANCH_COLORS = [
-              { bg: 'bg-blue-50/30', border: 'border-blue-200', line: 'bg-blue-300', text: 'text-blue-600', pill: 'bg-blue-50 border-blue-200', btn: 'border-blue-300 text-blue-400 hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50' },
-              { bg: 'bg-emerald-50/30', border: 'border-emerald-200', line: 'bg-emerald-300', text: 'text-emerald-600', pill: 'bg-emerald-50 border-emerald-200', btn: 'border-emerald-300 text-emerald-400 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50' },
-              { bg: 'bg-amber-50/30', border: 'border-amber-200', line: 'bg-amber-300', text: 'text-amber-600', pill: 'bg-amber-50 border-amber-200', btn: 'border-amber-300 text-amber-400 hover:border-amber-500 hover:text-amber-600 hover:bg-amber-50' },
-              { bg: 'bg-rose-50/30', border: 'border-rose-200', line: 'bg-rose-300', text: 'text-rose-600', pill: 'bg-rose-50 border-rose-200', btn: 'border-rose-300 text-rose-400 hover:border-rose-500 hover:text-rose-600 hover:bg-rose-50' },
-              { bg: 'bg-cyan-50/30', border: 'border-cyan-200', line: 'bg-cyan-300', text: 'text-cyan-600', pill: 'bg-cyan-50 border-cyan-200', btn: 'border-cyan-300 text-cyan-400 hover:border-cyan-500 hover:text-cyan-600 hover:bg-cyan-50' },
-            ];
-            const FALLBACK_COLOR = { bg: 'bg-slate-50/30', border: 'border-slate-300', line: 'bg-slate-300', text: 'text-slate-500', pill: 'bg-slate-100 border-slate-300', btn: 'border-slate-300 text-slate-400 hover:border-slate-500 hover:text-slate-600 hover:bg-slate-50' };
+            // Make.com style: filter label helper
+            function filterLabel(fc: Step['filter_config']): string {
+              if (!fc || !fc.rules || fc.rules.length === 0) return '';
+              const opLabels: Record<string, string> = { '==': 'is', '!=': 'is not', 'contains': 'contains', 'not_contains': 'doesn\'t contain', 'exists': 'exists', 'not_exists': 'is empty', 'has_tag': 'has tag', 'not_has_tag': 'doesn\'t have tag', 'starts_with': 'starts with', 'ends_with': 'ends with', '>': '>', '<': '<' };
+              return fc.rules.map(r => {
+                const op = opLabels[r.operator] || r.operator;
+                return ['exists', 'not_exists'].includes(r.operator) ? `${r.field} ${op}` : `${r.field} ${op} "${r.value}"`;
+              }).join(fc.logic === 'OR' ? ' OR ' : ' AND ');
+            }
 
-            function filterSummary(fc: Step['filter_config']): string {
-              if (!fc || !fc.rules || fc.rules.length === 0) return 'No filter';
-              return fc.rules.map(r => `${r.field} ${r.operator} ${r.value || ''}`).join(` ${fc.logic || 'AND'} `);
+            // Make.com style: filter line between router and module
+            function FilterLine({ step, color, label }: { step: Step | null; color: string; label: string }) {
+              const hasFilter = step?.filter_config && step.filter_config.rules.length > 0;
+              const summary = step ? filterLabel(step.filter_config) : '';
+              return (
+                <div className="flex flex-col items-center my-1">
+                  <div className={`w-0.5 h-3 ${color}`} />
+                  <button
+                    onClick={() => step && openFilterEditor(step)}
+                    className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-left max-w-full ${
+                      hasFilter
+                        ? 'bg-purple-50 border-purple-300 hover:border-purple-400 hover:shadow-sm'
+                        : 'bg-white border-dashed border-slate-300 hover:border-purple-400 hover:bg-purple-50'
+                    }`}
+                  >
+                    <Filter className={`w-3 h-3 flex-shrink-0 ${hasFilter ? 'text-purple-500' : 'text-slate-300 group-hover:text-purple-400'}`} />
+                    {hasFilter ? (
+                      <span className="text-[10px] font-bold text-purple-700 truncate">{summary}</span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 group-hover:text-purple-500 italic">Set up a filter</span>
+                    )}
+                  </button>
+                  <div className="text-[8px] font-bold text-slate-400 mt-0.5">{label}</div>
+                  <div className={`w-0.5 h-3 ${color}`} />
+                </div>
+              );
             }
 
             function renderBranch(parentId: string | null): React.ReactNode {
@@ -656,13 +680,14 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                       onDelete={() => deleteStep(step.id)}
                     />
 
-                    {/* Condition → split into YES / NO columns */}
+                    {/* Condition → YES / NO split */}
                     {isCondition && (() => {
                       const yesChildren = childMap.get(step.id)?.filter((c) => c.branch_type === 'YES') || [];
                       const noChildren = childMap.get(step.id)?.filter((c) => c.branch_type === 'NO') || [];
                       return (
                         <div className="mt-1">
                           <div className="flex items-start gap-3">
+                            {/* YES */}
                             <div className="flex-1 min-w-0">
                               <div className="flex flex-col items-center">
                                 <div className="w-0.5 h-4 bg-emerald-300" />
@@ -678,13 +703,13 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                                   </div>
                                 ))}
                                 {yesChildren.length === 0 && (
-                                  <div className="flex flex-col items-center py-4">
-                                    <button onClick={() => { setNewBranchType('YES'); openAddForm(step.id); }} className="w-8 h-8 rounded-full border-2 border-dashed border-emerald-300 flex items-center justify-center text-emerald-400 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all"><Plus className="w-4 h-4" /></button>
-                                    <p className="text-[10px] text-emerald-400 mt-1">Add step</p>
+                                  <div className="flex flex-col items-center py-3">
+                                    <button onClick={() => { setNewBranchType('YES'); openAddForm(step.id); }} className="w-7 h-7 rounded-full border-2 border-dashed border-emerald-300 flex items-center justify-center text-emerald-400 hover:border-emerald-500 hover:text-emerald-600 transition-all"><Plus className="w-3.5 h-3.5" /></button>
                                   </div>
                                 )}
                               </div>
                             </div>
+                            {/* NO */}
                             <div className="flex-1 min-w-0">
                               <div className="flex flex-col items-center">
                                 <div className="w-0.5 h-4 bg-red-300" />
@@ -700,9 +725,8 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                                   </div>
                                 ))}
                                 {noChildren.length === 0 && (
-                                  <div className="flex flex-col items-center py-4">
-                                    <button onClick={() => { setNewBranchType('NO'); openAddForm(step.id); }} className="w-8 h-8 rounded-full border-2 border-dashed border-red-300 flex items-center justify-center text-red-400 hover:border-red-500 hover:text-red-600 hover:bg-red-50 transition-all"><Plus className="w-4 h-4" /></button>
-                                    <p className="text-[10px] text-red-400 mt-1">Add step</p>
+                                  <div className="flex flex-col items-center py-3">
+                                    <button onClick={() => { setNewBranchType('NO'); openAddForm(step.id); }} className="w-7 h-7 rounded-full border-2 border-dashed border-red-300 flex items-center justify-center text-red-400 hover:border-red-500 hover:text-red-600 transition-all"><Plus className="w-3.5 h-3.5" /></button>
                                   </div>
                                 )}
                               </div>
@@ -712,103 +736,93 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                       );
                     })()}
 
-                    {/* Router → N dynamic branch columns */}
+                    {/* Router → Make.com style routes with filter lines */}
                     {isRouter && (() => {
                       const allChildren = childMap.get(step.id) || [];
                       const branchChildren = allChildren.filter(c => c.branch_type?.startsWith('BRANCH_')).sort((a, b) => a.step_order - b.step_order);
                       const fallbackChildren = allChildren.filter(c => c.branch_type === 'FALLBACK');
-                      // Group by branch_type
                       const branchTypes = [...new Set(branchChildren.map(c => c.branch_type!))];
                       const nextBranchIdx = branchTypes.length;
+                      const routeColors = ['bg-purple-300', 'bg-blue-300', 'bg-emerald-300', 'bg-amber-300', 'bg-rose-300'];
 
                       return (
-                        <div className="mt-1">
-                          <div className="flex items-start gap-2 overflow-x-auto">
-                            {/* Numbered branches */}
-                            {branchTypes.map((bt, idx) => {
-                              const color = BRANCH_COLORS[idx % BRANCH_COLORS.length];
-                              const stepsInBranch = branchChildren.filter(c => c.branch_type === bt);
-                              const branchLabel = `Branch ${idx + 1}`;
-                              const firstStep = stepsInBranch[0];
-                              const summary = firstStep?.filter_config ? filterSummary(firstStep.filter_config) : 'Click to add filter';
-                              return (
-                                <div key={bt} className="flex-1 min-w-[140px]">
-                                  <div className="flex flex-col items-center">
-                                    <div className={`w-0.5 h-4 ${color.line}`} />
-                                    <button
-                                      onClick={() => firstStep && openFilterEditor(firstStep)}
-                                      className={`text-[9px] font-black ${color.text} ${color.pill} border rounded-full px-3 py-1 uppercase tracking-widest whitespace-nowrap hover:shadow-md transition-all cursor-pointer`}
-                                    >
-                                      {branchLabel}
-                                    </button>
-                                    <button
-                                      onClick={() => firstStep && openFilterEditor(firstStep)}
-                                      className="text-[8px] text-slate-400 mt-0.5 truncate max-w-full px-1 hover:text-purple-500 cursor-pointer transition-colors"
-                                    >
-                                      {summary}
-                                    </button>
-                                    <div className={`w-0.5 h-3 ${color.line}`} />
-                                  </div>
-                                  <div className={`border-2 ${color.border} rounded-2xl p-3 ${color.bg}`}>
-                                    {stepsInBranch.map((child) => (
-                                      <div key={child.id}>
-                                        <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
-                                        {renderBranch(child.id)}
-                                        <AddStepButton onClick={() => { setNewBranchType(bt); openAddForm(step.id); }} />
-                                      </div>
-                                    ))}
-                                    {stepsInBranch.length === 0 && (
-                                      <div className="flex flex-col items-center py-4">
-                                        <button onClick={() => { setNewBranchType(bt); openAddForm(step.id); }} className={`w-8 h-8 rounded-full border-2 border-dashed ${color.btn} flex items-center justify-center transition-all`}><Plus className="w-4 h-4" /></button>
-                                        <p className={`text-[10px] ${color.text} mt-1`}>Add step</p>
-                                      </div>
-                                    )}
-                                  </div>
+                        <div className="mt-2 space-y-0">
+                          {/* Routes stacked vertically — each route is: filter line → steps */}
+                          {branchTypes.map((bt, idx) => {
+                            const stepsInBranch = branchChildren.filter(c => c.branch_type === bt);
+                            const firstStep = stepsInBranch[0];
+                            const lineColor = routeColors[idx % routeColors.length];
+                            return (
+                              <div key={bt} className="relative pl-6 border-l-2 border-purple-200 ml-4">
+                                {/* Route number badge */}
+                                <div className="absolute -left-3 top-3 w-6 h-6 rounded-full bg-purple-500 text-white text-[10px] font-black flex items-center justify-center shadow-sm">
+                                  {idx + 1}
                                 </div>
-                              );
-                            })}
+                                {/* Filter line (Make.com style — clickable wrench/filter) */}
+                                <FilterLine step={firstStep || null} color={lineColor} label={`Route ${idx + 1}`} />
+                                {/* Steps in this route */}
+                                <div className="space-y-0 pb-3">
+                                  {stepsInBranch.map((child) => (
+                                    <div key={child.id}>
+                                      <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
+                                      {renderBranch(child.id)}
+                                      <AddStepButton onClick={() => { setNewBranchType(bt); openAddForm(step.id); }} />
+                                    </div>
+                                  ))}
+                                  {stepsInBranch.length === 0 && (
+                                    <div className="flex items-center gap-2 py-2">
+                                      <button onClick={() => { setNewBranchType(bt); openAddForm(step.id); }} className="w-7 h-7 rounded-full border-2 border-dashed border-purple-300 flex items-center justify-center text-purple-400 hover:border-purple-500 hover:text-purple-600 transition-all"><Plus className="w-3.5 h-3.5" /></button>
+                                      <span className="text-[10px] text-slate-400">Add module</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
 
-                            {/* Fallback branch */}
-                            <div className="flex-1 min-w-[140px]">
-                              <div className="flex flex-col items-center">
-                                <div className={`w-0.5 h-4 ${FALLBACK_COLOR.line}`} />
-                                <span className={`text-[9px] font-black ${FALLBACK_COLOR.text} ${FALLBACK_COLOR.pill} border rounded-full px-3 py-1 uppercase tracking-widest`}>Fallback</span>
-                                <p className="text-[8px] text-slate-400 mt-0.5">If no branch matches</p>
-                                <div className={`w-0.5 h-3 ${FALLBACK_COLOR.line}`} />
+                          {/* Fallback route */}
+                          <div className="relative pl-6 border-l-2 border-slate-200 ml-4">
+                            <div className="absolute -left-3 top-3 w-6 h-6 rounded-full bg-slate-400 text-white text-[9px] font-black flex items-center justify-center shadow-sm">
+                              FB
+                            </div>
+                            <div className="flex flex-col items-start my-1">
+                              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 mt-1">
+                                <Filter className="w-3 h-3 text-slate-400" />
+                                <span className="text-[10px] text-slate-500 italic">Fallback — runs if no route matches</span>
                               </div>
-                              <div className={`border-2 ${FALLBACK_COLOR.border} rounded-2xl p-3 ${FALLBACK_COLOR.bg}`}>
-                                {fallbackChildren.map((child) => (
-                                  <div key={child.id}>
-                                    <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
-                                    {renderBranch(child.id)}
-                                    <AddStepButton onClick={() => { setNewBranchType('FALLBACK'); openAddForm(step.id); }} />
-                                  </div>
-                                ))}
-                                {fallbackChildren.length === 0 && (
-                                  <div className="flex flex-col items-center py-4">
-                                    <button onClick={() => { setNewBranchType('FALLBACK'); openAddForm(step.id); }} className={`w-8 h-8 rounded-full border-2 border-dashed ${FALLBACK_COLOR.btn} flex items-center justify-center transition-all`}><Plus className="w-4 h-4" /></button>
-                                    <p className={`text-[10px] ${FALLBACK_COLOR.text} mt-1`}>Add step</p>
-                                  </div>
-                                )}
-                              </div>
+                            </div>
+                            <div className="space-y-0 pb-3">
+                              {fallbackChildren.map((child) => (
+                                <div key={child.id}>
+                                  <StepCard step={child} onClick={() => openEditForm(child)} onDelete={() => deleteStep(child.id)} />
+                                  {renderBranch(child.id)}
+                                  <AddStepButton onClick={() => { setNewBranchType('FALLBACK'); openAddForm(step.id); }} />
+                                </div>
+                              ))}
+                              {fallbackChildren.length === 0 && (
+                                <div className="flex items-center gap-2 py-2">
+                                  <button onClick={() => { setNewBranchType('FALLBACK'); openAddForm(step.id); }} className="w-7 h-7 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:border-slate-500 hover:text-slate-600 transition-all"><Plus className="w-3.5 h-3.5" /></button>
+                                  <span className="text-[10px] text-slate-400">Add module</span>
+                                </div>
+                              )}
                             </div>
                           </div>
 
-                          {/* Add new branch button */}
-                          <div className="flex justify-center mt-2">
+                          {/* Add new route */}
+                          <div className="pl-6 ml-4 pb-2">
                             <button
                               onClick={() => { setNewBranchType(`BRANCH_${nextBranchIdx}`); openAddForm(step.id); }}
-                              className="px-4 py-2 border-2 border-dashed border-purple-300 rounded-xl text-xs font-bold text-purple-400 hover:border-purple-500 hover:text-purple-600 hover:bg-purple-50 transition-all flex items-center gap-1.5"
+                              className="flex items-center gap-1.5 px-3 py-2 border-2 border-dashed border-purple-200 rounded-xl text-xs font-bold text-purple-400 hover:border-purple-400 hover:text-purple-600 hover:bg-purple-50 transition-all"
                             >
                               <Plus className="w-3.5 h-3.5" />
-                              Add Branch
+                              Add Route
                             </button>
                           </div>
                         </div>
                       );
                     })()}
 
-                    {/* Non-condition, non-router → add button then render default children inline */}
+                    {/* Non-condition, non-router → default children */}
                     {!isCondition && !isRouter && (
                       <>
                         <AddStepButton onClick={() => openAddForm(step.id)} />
@@ -1548,141 +1562,161 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
         </div>
       )}
 
-      {/* ─── Filter Editor Modal (for router branches) ────────── */}
+      {/* ─── Set up a filter (Make.com style modal) ────────────── */}
       {showFilterEditor && (
-        <div className="fixed inset-0 z-[150] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
-            <div className="p-5 bg-purple-600 text-white flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-purple-800 rounded-lg flex items-center justify-center">
-                  <Filter className="w-4 h-4 text-white" />
-                </div>
-                <h3 className="font-bold text-lg">Edit Route Filter</h3>
-              </div>
-              <button onClick={() => { setShowFilterEditor(false); setFilterEditStepId(null); }} className="p-2 hover:bg-purple-700 rounded-xl transition-all">
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-[150] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+            {/* Header — Make.com uses a clean minimal header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-bold text-slate-900">Set up a filter</h3>
+              <button onClick={() => { setShowFilterEditor(false); setFilterEditStepId(null); }} className="p-1.5 hover:bg-slate-100 rounded-lg transition-all">
+                <X className="w-4 h-4 text-slate-400" />
               </button>
             </div>
-            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <p className="text-xs text-slate-500">Take this route if the following conditions are met:</p>
 
-              {filterRules.length > 1 && (
-                <div className="flex justify-end">
-                  <select
-                    value={filterLogic}
-                    onChange={(e) => setFilterLogic(e.target.value as 'AND' | 'OR')}
-                    className="text-xs font-bold bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5 text-purple-600"
-                  >
-                    <option value="AND">ALL rules must match (AND)</option>
-                    <option value="OR">ANY rule can match (OR)</option>
-                  </select>
-                </div>
-              )}
+            <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+              {/* Label — like Make.com's label field */}
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">Label</label>
+                <p className="text-[11px] text-slate-400 mb-2">The label appears on the route line in the flow.</p>
+              </div>
 
-              {filterRules.map((rule, ri) => (
-                <div key={ri} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Rule {ri + 1}</span>
-                    <button onClick={() => setFilterRules(prev => prev.filter((_, i) => i !== ri))} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <select
-                    value={rule.field}
-                    onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], field: e.target.value }; setFilterRules(r); }}
-                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-purple-500 outline-none"
-                  >
-                    <optgroup label="Contact">
-                      <option value="name">Name</option>
-                      <option value="email">Email</option>
-                      <option value="phone">Phone</option>
-                      <option value="status">Status</option>
-                      <option value="tags">Tags</option>
-                      <option value="notes">Notes</option>
-                      <option value="line_id">LINE ID</option>
-                      <option value="attended">Attended</option>
-                      <option value="purchased">Purchased</option>
-                    </optgroup>
-                    <optgroup label="Webinar">
-                      <option value="webinar_upcoming">Webinar is Upcoming</option>
-                      <option value="webinar_link">Webinar Link</option>
-                      <option value="webinar_date">Webinar Date</option>
-                    </optgroup>
-                  </select>
-                  <div className="flex gap-2">
+              {/* Condition section */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs font-bold text-slate-500">Condition</label>
+                  {filterRules.length > 1 && (
                     <select
-                      value={rule.operator}
-                      onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], operator: e.target.value }; setFilterRules(r); }}
-                      className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                      value={filterLogic}
+                      onChange={(e) => setFilterLogic(e.target.value as 'AND' | 'OR')}
+                      className="text-[10px] font-bold bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-600"
                     >
-                      {rule.field === 'tags' ? (
-                        <>
-                          <option value="has_tag">Has tag</option>
-                          <option value="not_has_tag">Does not have tag</option>
-                          <option value="exists">Has any tags</option>
-                          <option value="not_exists">Has no tags</option>
-                        </>
-                      ) : ['attended', 'purchased'].includes(rule.field) ? (
-                        <option value="==">Equals</option>
-                      ) : (
-                        <>
-                          <option value="==">Equals</option>
-                          <option value="!=">Does not equal</option>
-                          <option value="contains">Contains</option>
-                          <option value="not_contains">Does not contain</option>
-                          <option value="exists">Exists (has value)</option>
-                          <option value="not_exists">Does not exist (empty)</option>
-                          <option value="starts_with">Starts with</option>
-                          <option value="ends_with">Ends with</option>
-                        </>
-                      )}
+                      <option value="AND">AND — all must match</option>
+                      <option value="OR">OR — any can match</option>
                     </select>
-                    {!['exists', 'not_exists'].includes(rule.operator) && rule.field !== 'webinar_upcoming' && (
-                      ['attended', 'purchased'].includes(rule.field) ? (
-                        <select
-                          value={rule.value}
-                          onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], value: e.target.value }; setFilterRules(r); }}
-                          className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-purple-500 outline-none"
-                        >
-                          <option value="true">True</option>
-                          <option value="false">False</option>
-                        </select>
-                      ) : (
-                        <input
-                          type="text"
-                          value={rule.value}
-                          onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], value: e.target.value }; setFilterRules(r); }}
-                          placeholder="value..."
-                          className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-purple-500 outline-none"
-                        />
-                      )
-                    )}
-                  </div>
-                  {ri < filterRules.length - 1 && (
-                    <div className="flex justify-center pt-1">
-                      <span className="text-[9px] font-black text-purple-400 uppercase">{filterLogic}</span>
-                    </div>
                   )}
                 </div>
-              ))}
 
-              <button
-                onClick={() => setFilterRules(prev => [...prev, { field: 'tags', operator: 'has_tag', value: '' }])}
-                className="w-full py-3 border-2 border-dashed border-purple-200 rounded-xl text-xs font-bold text-purple-400 hover:border-purple-400 hover:text-purple-600 transition-all flex items-center justify-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Filter Rule
-              </button>
+                {/* Condition rows — Make.com style: field | operator | value in a row */}
+                <div className="space-y-3">
+                  {filterRules.map((rule, ri) => (
+                    <div key={ri} className="space-y-2">
+                      {ri > 0 && (
+                        <div className="flex justify-center">
+                          <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{filterLogic}</span>
+                        </div>
+                      )}
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-2">
+                        {/* Row 1: Field */}
+                        <select
+                          value={rule.field}
+                          onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], field: e.target.value }; setFilterRules(r); }}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-purple-500 outline-none"
+                        >
+                          <optgroup label="Contact">
+                            <option value="name">Name</option>
+                            <option value="email">Email</option>
+                            <option value="phone">Phone</option>
+                            <option value="status">Status</option>
+                            <option value="tags">Tags</option>
+                            <option value="notes">Notes</option>
+                            <option value="line_id">LINE ID</option>
+                            <option value="attended">Attended</option>
+                            <option value="purchased">Purchased</option>
+                          </optgroup>
+                          <optgroup label="Webinar">
+                            <option value="webinar_upcoming">Webinar is Upcoming</option>
+                            <option value="webinar_link">Webinar Link</option>
+                            <option value="webinar_date">Webinar Date</option>
+                          </optgroup>
+                        </select>
+                        {/* Row 2: Operator + Value side by side */}
+                        <div className="flex gap-2">
+                          <select
+                            value={rule.operator}
+                            onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], operator: e.target.value }; setFilterRules(r); }}
+                            className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-purple-500 outline-none"
+                          >
+                            {rule.field === 'tags' ? (
+                              <>
+                                <option value="has_tag">Has tag</option>
+                                <option value="not_has_tag">Does not have tag</option>
+                                <option value="exists">Has any tags</option>
+                                <option value="not_exists">Has no tags</option>
+                              </>
+                            ) : ['attended', 'purchased'].includes(rule.field) ? (
+                              <option value="==">Equal to</option>
+                            ) : (
+                              <>
+                                <option value="==">Equal to</option>
+                                <option value="!=">Not equal to</option>
+                                <option value="contains">Contains</option>
+                                <option value="not_contains">Does not contain</option>
+                                <option value="exists">Exists</option>
+                                <option value="not_exists">Does not exist</option>
+                                <option value="starts_with">Starts with</option>
+                                <option value="ends_with">Ends with</option>
+                              </>
+                            )}
+                          </select>
+                          {!['exists', 'not_exists'].includes(rule.operator) && rule.field !== 'webinar_upcoming' && (
+                            ['attended', 'purchased'].includes(rule.field) ? (
+                              <select
+                                value={rule.value}
+                                onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], value: e.target.value }; setFilterRules(r); }}
+                                className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-purple-500 outline-none"
+                              >
+                                <option value="true">True</option>
+                                <option value="false">False</option>
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                value={rule.value}
+                                onChange={(e) => { const r = [...filterRules]; r[ri] = { ...r[ri], value: e.target.value }; setFilterRules(r); }}
+                                placeholder="Enter value..."
+                                className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-purple-500 outline-none"
+                              />
+                            )
+                          )}
+                          <button onClick={() => setFilterRules(prev => prev.filter((_, i) => i !== ri))} className="p-2 text-slate-300 hover:text-red-500 transition-colors flex-shrink-0">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-              {filterRules.length === 0 && (
-                <p className="text-xs text-slate-400 italic text-center">No filter = this route always runs</p>
-              )}
+                {/* Add condition — Make.com shows "Add AND condition" / "Add OR condition" */}
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => { setFilterLogic('AND'); setFilterRules(prev => [...prev, { field: 'tags', operator: 'has_tag', value: '' }]); }}
+                    className="flex-1 py-2.5 text-xs font-bold text-slate-500 hover:text-purple-600 hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-lg transition-all"
+                  >
+                    + Add AND condition
+                  </button>
+                  <button
+                    onClick={() => { setFilterLogic('OR'); setFilterRules(prev => [...prev, { field: 'tags', operator: 'has_tag', value: '' }]); }}
+                    className="flex-1 py-2.5 text-xs font-bold text-slate-500 hover:text-purple-600 hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-lg transition-all"
+                  >
+                    + Add OR condition
+                  </button>
+                </div>
 
+                {filterRules.length === 0 && (
+                  <p className="text-xs text-slate-400 italic text-center mt-3">No conditions set — this route will always run.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Footer — OK button like Make.com */}
+            <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
               <button
                 onClick={saveFilterForStep}
-                className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-purple-600/20 hover:bg-purple-700 transition-all"
+                className="px-8 py-2.5 bg-purple-600 text-white rounded-lg font-bold text-sm hover:bg-purple-700 transition-all shadow-sm"
               >
-                Save Filter
+                OK
               </button>
             </div>
           </div>
