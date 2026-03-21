@@ -307,6 +307,32 @@ function CRMDashboard() {
     }
   };
 
+  // Search: query the DB instead of filtering loaded contacts
+  const [isSearching, setIsSearching] = useState(false);
+  useEffect(() => {
+    if (!searchQuery) {
+      // Restore normal paginated list when search is cleared
+      fetchContacts(1);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(`${CONTACTS_API}?search=${encodeURIComponent(searchQuery)}&limit=200`);
+        const result = await res.json();
+        setContacts(result.data || []);
+        setContactsTotal(result.total || 0);
+        setContactsPage(1);
+      } catch (e) {
+        console.error('Search error:', e);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
   const handleDedup = async () => {
     setIsDeduping(true);
     try {

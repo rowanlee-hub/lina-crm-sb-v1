@@ -27,12 +27,18 @@ import { stepsToNodesAndEdges, positionsFromNodes, type StepData, type WorkflowD
 
 // ─── Types ──────────────────────────────────────────────────────────
 
+export interface WorkflowTrigger {
+  type: string;
+  value: string;
+}
+
 export interface Workflow {
   id: string;
   name: string;
   description: string;
   trigger_type: string;
   trigger_value: string;
+  triggers?: WorkflowTrigger[];
   is_active: boolean;
   step_count: number;
   active_enrollments: number;
@@ -62,6 +68,61 @@ const NODE_TYPES = {
   conditionNode: ConditionNode,
 };
 
+// ─── Trigger Row Sub-component ──────────────────────────────────────
+
+const TRIGGER_OPTIONS = [
+  { id: 'TAG_ADDED', label: 'Tag Added' },
+  { id: 'TAG_REMOVED', label: 'Tag Removed' },
+  { id: 'USER_FOLLOW', label: 'User Follow' },
+  { id: 'KEYWORD_RECEIVED', label: 'Keyword Received' },
+  { id: 'MANUAL', label: 'Manual' },
+];
+
+function TriggerRow({
+  type, value, onTypeChange, onValueChange, onRemove, isPrimary,
+}: {
+  type: string;
+  value: string;
+  onTypeChange: (t: string) => void;
+  onValueChange: (v: string) => void;
+  onRemove: (() => void) | null;
+  isPrimary: boolean;
+}) {
+  const needsValue = type === 'TAG_ADDED' || type === 'TAG_REMOVED' || type === 'KEYWORD_RECEIVED';
+  return (
+    <div className="flex items-start gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+      <div className="flex-1 space-y-2">
+        <select
+          value={type}
+          onChange={(e) => onTypeChange(e.target.value)}
+          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+        >
+          {TRIGGER_OPTIONS.map(t => (
+            <option key={t.id} value={t.id}>{t.label}</option>
+          ))}
+        </select>
+        {needsValue && (
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onValueChange(e.target.value)}
+            placeholder={type === 'KEYWORD_RECEIVED' ? 'e.g. register' : 'e.g. Interested'}
+            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+          />
+        )}
+      </div>
+      {!isPrimary && onRemove && (
+        <button onClick={onRemove} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors mt-1">
+          <X className="w-4 h-4" />
+        </button>
+      )}
+      {isPrimary && (
+        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mt-2 flex-shrink-0">Primary</span>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────
 
 interface WorkflowBuilderProps {
@@ -82,12 +143,16 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
   const [savingWf, setSavingWf] = useState(false);
   const [savedWf, setSavedWf] = useState(false);
 
+  // Extra triggers (multi-trigger support)
+  const [extraTriggers, setExtraTriggers] = useState<WorkflowTrigger[]>(workflow.triggers || []);
+
   // Track unsaved changes
   const isDirty =
     wfName !== workflow.name ||
     wfTriggerType !== workflow.trigger_type ||
     wfTriggerValue !== (workflow.trigger_value || '') ||
-    wfIsActive !== workflow.is_active;
+    wfIsActive !== workflow.is_active ||
+    JSON.stringify(extraTriggers) !== JSON.stringify(workflow.triggers || []);
 
   // Unsaved changes confirm dialog
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -366,6 +431,7 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
           name: wfName,
           trigger_type: wfTriggerType,
           trigger_value: wfTriggerValue,
+          triggers: extraTriggers,
           is_active: wfIsActive,
         }),
       });
@@ -671,7 +737,7 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
               </button>
             </div>
 
-            <div className="p-8 space-y-5">
+            <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
               {/* Workflow name */}
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Workflow Name</label>
@@ -683,56 +749,48 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                 />
               </div>
 
-              {/* Trigger Type */}
+              {/* All triggers list */}
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Trigger Type</label>
-                <div className="grid grid-cols-1 gap-2">
-                  {([
-                    { id: 'TAG_ADDED', label: 'Tag Added', desc: 'When a tag is added to a contact' },
-                    { id: 'TAG_REMOVED', label: 'Tag Removed', desc: 'When a tag is removed from a contact' },
-                    { id: 'USER_FOLLOW', label: 'User Follow', desc: 'When someone follows your LINE account' },
-                    { id: 'KEYWORD_RECEIVED', label: 'Keyword Received', desc: 'When a specific keyword is messaged' },
-                    { id: 'MANUAL', label: 'Manual', desc: 'Triggered manually from contact page' },
-                  ] as const).map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => {
-                        setWfTriggerType(t.id);
-                        if (t.id === 'USER_FOLLOW' || t.id === 'MANUAL') setWfTriggerValue('');
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-2">Triggers <span className="text-blue-500">(any match fires the workflow)</span></label>
+                <div className="space-y-2">
+                  {/* Primary trigger */}
+                  <TriggerRow
+                    type={wfTriggerType}
+                    value={wfTriggerValue}
+                    onTypeChange={(t) => { setWfTriggerType(t); if (t === 'USER_FOLLOW' || t === 'MANUAL') setWfTriggerValue(''); }}
+                    onValueChange={setWfTriggerValue}
+                    onRemove={null}
+                    isPrimary
+                  />
+                  {/* Extra triggers */}
+                  {extraTriggers.map((t, i) => (
+                    <TriggerRow
+                      key={i}
+                      type={t.type}
+                      value={t.value}
+                      onTypeChange={(newType) => {
+                        const updated = [...extraTriggers];
+                        updated[i] = { type: newType, value: newType === 'USER_FOLLOW' || newType === 'MANUAL' ? '' : updated[i].value };
+                        setExtraTriggers(updated);
                       }}
-                      className={`flex items-start space-x-3 p-3 rounded-xl border-2 text-left transition-all ${
-                        wfTriggerType === t.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-100 hover:border-slate-200'
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded-full border-2 mt-0.5 flex-shrink-0 transition-all ${
-                        wfTriggerType === t.id ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
-                      }`} />
-                      <div>
-                        <p className={`text-sm font-bold ${wfTriggerType === t.id ? 'text-blue-700' : 'text-slate-700'}`}>{t.label}</p>
-                        <p className="text-[11px] text-slate-400">{t.desc}</p>
-                      </div>
-                    </button>
+                      onValueChange={(newVal) => {
+                        const updated = [...extraTriggers];
+                        updated[i] = { ...updated[i], value: newVal };
+                        setExtraTriggers(updated);
+                      }}
+                      onRemove={() => setExtraTriggers(prev => prev.filter((_, idx) => idx !== i))}
+                      isPrimary={false}
+                    />
                   ))}
                 </div>
+                <button
+                  onClick={() => setExtraTriggers(prev => [...prev, { type: 'TAG_ADDED', value: '' }])}
+                  className="mt-2 w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-xs font-bold text-slate-400 hover:border-blue-300 hover:text-blue-500 transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Another Trigger
+                </button>
               </div>
-
-              {/* Trigger Value (only for tag/keyword triggers) */}
-              {(wfTriggerType === 'TAG_ADDED' || wfTriggerType === 'TAG_REMOVED' || wfTriggerType === 'KEYWORD_RECEIVED') && (
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
-                    {wfTriggerType === 'KEYWORD_RECEIVED' ? 'Keyword' : 'Tag Name'}
-                  </label>
-                  <input
-                    type="text"
-                    value={wfTriggerValue}
-                    onChange={(e) => setWfTriggerValue(e.target.value)}
-                    placeholder={wfTriggerType === 'KEYWORD_RECEIVED' ? 'e.g. register' : 'e.g. Interested'}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-              )}
 
               {/* Active toggle */}
               <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
@@ -753,7 +811,7 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
                 disabled={savingWf}
                 className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition-all"
               >
-                {savingWf ? 'Saving…' : 'Save Trigger'}
+                {savingWf ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>

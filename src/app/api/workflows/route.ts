@@ -48,6 +48,7 @@ export async function POST(req: Request) {
       description: body.description || '',
       trigger_type: body.trigger_type || 'TAG_ADDED',
       trigger_value: body.trigger_value || '',
+      triggers: body.triggers || [],
       is_active: body.is_active ?? true,
     }).select().single();
 

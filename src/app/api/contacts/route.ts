@@ -10,6 +10,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const pendingFollowup = searchParams.get('pending_followup') === 'true';
     const fetchAll = searchParams.get('all') === 'true';
+    const search = searchParams.get('search') || '';
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 2000);
     const offset = (page - 1) * limit;
@@ -31,6 +32,9 @@ export async function GET(req: Request) {
         if (pendingFollowup) {
           q = q.not('follow_up_at', 'is', null).lte('follow_up_at', new Date().toISOString());
         }
+        if (search) {
+          q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,line_id.ilike.%${search}%`);
+        }
         const { data, error, count: c } = await q;
         if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
         if (c !== null && c !== undefined) count = c;
@@ -47,6 +51,9 @@ export async function GET(req: Request) {
         .range(offset, offset + limit - 1);
       if (pendingFollowup) {
         q = q.not('follow_up_at', 'is', null).lte('follow_up_at', new Date().toISOString());
+      }
+      if (search) {
+        q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,line_id.ilike.%${search}%`);
       }
       const { data, error, count: c } = await q;
       if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });

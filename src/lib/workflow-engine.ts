@@ -281,17 +281,30 @@ export async function processWorkflowTriggers(
   triggerValue: string,
   contactId: string
 ): Promise<void> {
+  // Fetch all active workflows
   const { data: workflows } = await supabase
     .from('workflows')
-    .select('id')
-    .eq('trigger_type', triggerType)
-    .eq('trigger_value', triggerValue)
+    .select('id, trigger_type, trigger_value, triggers')
     .eq('is_active', true);
 
   if (!workflows || workflows.length === 0) return;
 
+  const matched: string[] = [];
   for (const wf of workflows) {
-    await enrollContactInWorkflow(wf.id, contactId);
+    // Check legacy single trigger
+    if (wf.trigger_type === triggerType && wf.trigger_value === triggerValue) {
+      matched.push(wf.id);
+      continue;
+    }
+    // Check multi-trigger array
+    const extraTriggers: { type: string; value: string }[] = wf.triggers || [];
+    if (extraTriggers.some(t => t.type === triggerType && t.value === triggerValue)) {
+      matched.push(wf.id);
+    }
+  }
+
+  for (const id of matched) {
+    await enrollContactInWorkflow(id, contactId);
   }
 }
 
