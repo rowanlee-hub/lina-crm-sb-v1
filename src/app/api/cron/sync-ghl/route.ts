@@ -98,11 +98,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'GHL credentials not configured' }, { status: 500 });
     }
 
-    // ?full=true does a full sync (no time filter), otherwise last 30 minutes
+    // ?hours=N sets the lookback window (default: 1 hour, max: 168 = 7 days)
     const { searchParams } = new URL(req.url);
-    const fullSync = searchParams.get('full') === 'true';
-    const updatedAfter = fullSync ? undefined : new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    console.log(`GHL Sync: ${fullSync ? 'FULL sync' : `fetching contacts updated since ${updatedAfter}`}`);
+    const hoursBack = Math.min(parseInt(searchParams.get('hours') || '1', 10) || 1, 168);
+    const updatedAfter = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
+    console.log(`GHL Sync: fetching contacts updated in last ${hoursBack}h (since ${updatedAfter})`);
 
     const ghlContacts = await fetchGHLContacts(updatedAfter);
     console.log(`GHL Sync: found ${ghlContacts.length} recently updated contacts`);
