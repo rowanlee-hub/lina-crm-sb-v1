@@ -32,7 +32,7 @@ export async function processAutomations(
         } else if (auto.action_type === 'ADD_TAG') {
           await executeAddTag(contactId, auto.action_value, lineId);
         } else if (auto.action_type === 'REMOVE_TAG') {
-          await executeRemoveTag(contactId, auto.action_value);
+          await executeRemoveTag(contactId, auto.action_value, lineId);
         } else if (auto.action_type === 'ENROLL_WEBINAR') {
           await executeEnrollWebinar(contactId);
         }
@@ -107,9 +107,8 @@ async function executeAddTag(contactId: string, tag: string, lineId: string) {
 
   console.log(`[AutomationEngine] Auto-tag added: ${tag}`);
 
-  // Recursively trigger nested automations!
-  // We use a small delay or setImmediate to avoid deep recursion issues if any
-  processAutomations('TAG_ADDED', tag, contactId, lineId);
+  // Recursively trigger nested automations
+  await processAutomations('TAG_ADDED', tag, contactId, lineId);
 }
 
 async function executeEnrollWebinar(contactId: string) {
@@ -130,6 +129,10 @@ async function executeEnrollWebinar(contactId: string) {
 
   if (!webinarDate) {
     console.log(`[AutomationEngine] No webinar_date available for contact ${contactId}, skipping enroll`);
+    await supabase.from('contact_history').insert({
+      contact_id: contactId,
+      action: '[Auto] Webinar enrollment skipped — no webinar date set and no active webinar date found'
+    });
     return;
   }
 
@@ -138,7 +141,7 @@ async function executeEnrollWebinar(contactId: string) {
   console.log(`[AutomationEngine] Enrolled contact ${contactId} in webinar sequence`);
 }
 
-async function executeRemoveTag(contactId: string, tag: string) {
+async function executeRemoveTag(contactId: string, tag: string, lineId: string) {
   const { data: contact } = await supabase.from('contacts').select('tags').eq('id', contactId).single();
   const currentTags = contact?.tags || [];
   
@@ -155,6 +158,7 @@ async function executeRemoveTag(contactId: string, tag: string) {
   });
   
   console.log(`[AutomationEngine] Auto-tag removed: ${tag}`);
-  
-  // Triggers processAutomations('TAG_REMOVED', ...) if we had nested logic
+
+  // Trigger TAG_REMOVED automations
+  await processAutomations('TAG_REMOVED', tag, contactId, lineId);
 }

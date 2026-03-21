@@ -178,9 +178,16 @@ export async function POST(req: Request) {
       if (error) throw error;
       dbResult = data;
 
+      // Trigger TAG_REMOVED automations for removed tags
+      const removedTags = oldTags.filter(t => !newTags.includes(t));
+      const lineId = existing?.line_id || contact.lineId;
+      for (const tag of removedTags) {
+        const { processAutomations } = await import('@/lib/automation-engine');
+        processAutomations('TAG_REMOVED', tag, contact.id, lineId);
+      }
+
       // Auto-register new tags in tag_definitions + sync to LINE audience
       const addedTags = newTags.filter(t => !oldTags.includes(t));
-      const lineId = existing?.line_id || contact.lineId;
       for (const tag of addedTags) {
         await supabase.from('tag_definitions').upsert({ name: tag }, { onConflict: 'name' });
         // Sync to LINE Audience Group (fire-and-forget)

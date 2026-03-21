@@ -49,13 +49,16 @@ export async function DELETE(req: Request) {
     // Remove tag from all contacts that have it
     const { data: affected } = await supabase
       .from('contacts')
-      .select('id, tags')
+      .select('id, tags, line_id')
       .contains('tags', [name]);
 
     if (affected && affected.length > 0) {
       for (const contact of affected) {
         const updatedTags = (contact.tags as string[]).filter((t: string) => t !== name);
         await supabase.from('contacts').update({ tags: updatedTags }).eq('id', contact.id);
+        // Trigger TAG_REMOVED automations
+        const { processAutomations } = await import('@/lib/automation-engine');
+        processAutomations('TAG_REMOVED', name, contact.id, contact.line_id || '');
       }
     }
 

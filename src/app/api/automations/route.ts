@@ -15,6 +15,15 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const { name, trigger_type, trigger_value, action_type, action_value } = body;
+
+    if (!name?.trim() || !trigger_type?.trim() || !trigger_value?.trim() || !action_type?.trim()) {
+      return NextResponse.json({ success: false, error: 'name, trigger_type, trigger_value, and action_type are required' }, { status: 400 });
+    }
+    if (action_type !== 'ENROLL_WEBINAR' && !action_value?.trim()) {
+      return NextResponse.json({ success: false, error: 'action_value is required for this action type' }, { status: 400 });
+    }
+
     const { data, error } = await supabase.from('automations').insert(body).select().single();
     if (error) throw error;
     return NextResponse.json({ success: true, automation: data });
