@@ -4,7 +4,7 @@ import { supabase } from './supabase';
  * Rules Engine for LINE Marketing Automations
  */
 export async function processAutomations(
-  triggerType: 'TAG_ADDED' | 'TAG_REMOVED' | 'USER_FOLLOW',
+  triggerType: 'TAG_ADDED' | 'TAG_REMOVED' | 'USER_FOLLOW' | 'KEYWORD_RECEIVED',
   triggerValue: string, 
   contactId: string,
   lineId: string

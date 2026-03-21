@@ -10,7 +10,10 @@ import {
   Send, Lock, Bell, Layout, List, Trash2, Megaphone, Pencil,
   Table2, Upload, GitMerge, UserPlus, Zap, Inbox
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
+
+const WorkflowBuilder = dynamic(() => import("@/components/WorkflowBuilder"), { ssr: false });
 
 // ============================================================================
 // BACKEND URLS
@@ -2496,100 +2499,6 @@ interface Step {
 }
 interface Automation { id: string; name: string; trigger_type: string; trigger_value: string; action_type: string; action_value: string; is_active: boolean; }
 
-// ─── VISUAL CANVAS COMPONENTS ───────────────────────────────────────────────
-
-function VisualCanvas({ steps, onSelectNode, onAddNode }: { steps: Step[], onSelectNode: (s: Step) => void, onAddNode: (parentId: string, branch?: string) => void }) {
-  // Simple recursive tree builder
-  const renderNode = (step: Step, depth = 0) => {
-    const children = steps.filter(s => s.parent_id === step.id);
-    
-    return (
-      <div key={step.id} className="flex flex-col items-center">
-        {/* Node Card */}
-        <div 
-          onClick={() => onSelectNode(step)}
-          className={`w-48 p-4 rounded-xl border-2 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm ${
-            step.node_type === 'CONDITION' ? 'bg-amber-50 border-amber-200' :
-            step.node_type === 'WAIT' ? 'bg-indigo-50 border-indigo-200' :
-            'bg-white border-slate-200'
-          }`}
-        >
-          <div className="flex items-center space-x-2 mb-2">
-            {step.node_type === 'CONDITION' ? <Filter className="w-3.5 h-3.5 text-amber-600" /> :
-             step.node_type === 'WAIT' ? <Clock className="w-3.5 h-3.5 text-indigo-600" /> :
-             <MessageCircle className="w-3.5 h-3.5 text-blue-600" />}
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{step.node_type}</span>
-          </div>
-          <p className="text-xs font-bold text-slate-800 line-clamp-2">
-            {step.node_type === 'CONDITION' ? `If ${step.condition_config?.field || '...'}` :
-             step.node_type === 'WAIT' ? `Wait ${step.wait_config?.amount || '...'} ${step.wait_config?.unit || ''}` :
-             step.action_type === 'SEND_MESSAGE' ? step.message_template : `Add Tag: ${step.action_value}`}
-          </p>
-        </div>
-
-        {/* Children Branches */}
-        {children.length > 0 && (
-          <div className="flex flex-col items-center mt-8 relative">
-            {/* Connection Line */}
-            <div className="absolute top-[-32px] w-0.5 h-8 bg-slate-200" />
-            
-            <div className="flex space-x-12">
-              {children.map(child => (
-                <div key={child.id} className="flex flex-col items-center">
-                  {child.branch_type && child.branch_type !== 'DEFAULT' && (
-                    <span className={`text-[9px] font-black uppercase mb-2 px-1.5 py-0.5 rounded ${child.branch_type === 'YES' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                      {child.branch_type}
-                    </span>
-                  )}
-                  {renderNode(child, depth + 1)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Add Button (if no children or ACTION node) */}
-        {children.length === 0 && (
-          <button 
-            onClick={(e) => { e.stopPropagation(); onAddNode(step.id); }}
-            className="mt-4 w-6 h-6 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all z-10"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-    );
-  };
-
-  const triggerNode = steps.find(s => s.node_type === 'START' || !s.parent_id);
-
-  return (
-    <div className="w-full h-full min-h-[500px] flex justify-center py-10 overflow-x-auto">
-      <div className="flex flex-col items-center">
-        {/* Trigger Header */}
-        <div className="w-56 p-4 bg-slate-900 rounded-2xl shadow-xl flex items-center space-x-3 mb-8 border border-slate-800">
-           <div className="p-2 bg-blue-600 rounded-lg text-white"><ArrowLeft className="w-5 h-5 rotate-90" /></div>
-           <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Trigger</p>
-              <p className="text-sm font-bold text-white">New Lead Added</p>
-           </div>
-        </div>
-        
-        {/* Draw Tree */}
-        {triggerNode ? renderNode(triggerNode) : (
-          <button 
-            onClick={() => onAddNode('')} 
-            className="w-48 p-8 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all bg-white"
-          >
-            <Plus className="w-8 h-8 mb-2" />
-            <span className="text-xs font-bold">Add First Step</span>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function AutomationsView({ initialSub }: { initialSub?: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<'workflows' | 'broadcast' | 'templates' | 'tags' | 'webinar'>(
@@ -2601,7 +2510,6 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
     router.push(`/?tab=marketing&sub=${sub}`);
   };
 
-  const [viewMode, setViewMode] = useState<'list' | 'canvas'>('list');
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -2623,7 +2531,6 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   const [selectedWf, setSelectedWf] = useState<Workflow | null>(null);
   const [steps, setSteps] = useState<Step[]>([]);
   const [stepsLoading, setStepsLoading] = useState(false);
-  const [selectedStep, setSelectedStep] = useState<Step | null>(null);
 
   // Create workflow form
   const [showWfForm, setShowWfForm] = useState(false);
@@ -2632,24 +2539,6 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   const [wfTrigger, setWfTrigger] = useState('TAG_ADDED');
   const [wfTriggerVal, setWfTriggerVal] = useState('');
 
-  // Add step form (Phase 8 compatible)
-  const [showStepForm, setShowStepForm] = useState(false);
-  const [newParentId, setNewParentId] = useState<string | undefined>();
-  const [newBranchType, setNewBranchType] = useState<'YES' | 'NO' | 'DEFAULT'>('DEFAULT');
-  const [stepNodeType, setStepNodeType] = useState<Step['node_type']>('ACTION');
-  
-  const [stepDay, setStepDay] = useState(5); // Friday
-  const [stepTime, setStepTime] = useState('09:00');
-  const [stepAction, setStepAction] = useState('SEND_MESSAGE');
-  const [stepMessage, setStepMessage] = useState('');
-  const [stepTagVal, setStepTagVal] = useState('');
-  
-  // Wait/Condition config
-  const [waitAmount, setWaitAmount] = useState(1);
-  const [waitUnit, setWaitUnit] = useState('days');
-  const [condField, setCondField] = useState('attended');
-  const [condOp, setCondOp] = useState('==');
-  const [condVal, setCondVal] = useState('true');
 
   // Simple automation form
   const [showRuleForm, setShowRuleForm] = useState(false);
@@ -2716,7 +2605,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
     const data = await res.json();
     setSteps(Array.isArray(data) ? data : []);
     setStepsLoading(false);
-    if (Array.isArray(data) && data.length > 0) setViewMode('canvas');
+    // Steps loaded — WorkflowBuilder will handle view mode
   };
 
   const createWorkflow = async () => {
@@ -2738,57 +2627,6 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   const toggleWorkflow = async (id: string, current: boolean) => {
     await fetch('/api/workflows', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, is_active: !current }) });
     setWorkflows(prev => prev.map(w => w.id === id ? { ...w, is_active: !current } : w));
-  };
-
-  const addStep = async () => {
-    if (!selectedWf) return;
-    
-    // Auto-calculate order based on siblings
-    const siblings = steps.filter(s => s.parent_id === newParentId);
-    const order = siblings.length + 1;
-
-    const payload: any = { 
-      workflow_id: selectedWf.id, 
-      parent_id: newParentId,
-      branch_type: newBranchType,
-      node_type: stepNodeType,
-      step_order: order,
-      action_type: stepAction, 
-      message_template: stepAction === 'SEND_MESSAGE' ? stepMessage : '', 
-      action_value: stepAction !== 'SEND_MESSAGE' ? stepTagVal : '' 
-    };
-
-    if (stepNodeType === 'WAIT') {
-      payload.wait_config = { amount: waitAmount, unit: waitUnit };
-    } else if (stepNodeType === 'CONDITION') {
-      payload.condition_config = { field: condField, operator: condOp, value: condVal };
-    } else if (stepNodeType === 'ACTION') {
-      // Keep legacy day/time for now if needed, though hidden in canvas
-      payload.day_of_week = stepDay;
-      payload.send_time = stepTime;
-    }
-
-    try {
-      const res = await fetch('/api/workflows/steps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSteps([...steps, { ...data.step, day_name: stepDay !== undefined ? DAY_NAMES[stepDay] : undefined }]);
-        setShowStepForm(false);
-        setStepMessage('');
-        setStepTagVal('');
-        setNewParentId(undefined);
-        setNewBranchType('DEFAULT');
-      } else { alert(`Failed to add step: ${data.error || 'Unknown error'}`); }
-    } catch (e: any) { alert(`Error: ${e.message}`); }
-  };
-
-  const deleteStep = async (id: string) => {
-    await fetch(`/api/workflows/steps?id=${id}`, { method: 'DELETE' });
-    setSteps(prev => prev.filter(s => s.id !== id));
   };
 
   const createRule = async () => {
@@ -2957,195 +2795,11 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   // ─── WORKFLOW DETAIL VIEW ────────────────────────────────
   if (selectedWf) {
     return (
-      <div className="flex-1 w-full h-full bg-slate-50 overflow-y-auto p-8 relative">
-        <div className="max-w-6xl mx-auto space-y-6">
-          {/* Header */}
-          <div className="flex items-center space-x-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <button onClick={() => { setSelectedWf(null); setSteps([]); setViewMode('list'); }} className="p-2 hover:bg-slate-100 rounded-xl transition-all"><X className="w-5 h-5 text-slate-400" /></button>
-            <div className="flex-1">
-              <h1 className="text-2xl font-extrabold text-slate-900">{selectedWf.name}</h1>
-              <div className="flex items-center space-x-3 mt-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Trigger: {selectedWf.trigger_type}</span>
-                <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                <span className="text-[10px] font-bold text-blue-500 uppercase">{selectedWf.trigger_value}</span>
-              </div>
-            </div>
-            
-            <div className="flex bg-slate-100 p-1 rounded-xl">
-               <button onClick={() => setViewMode('canvas')} className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-2 transition-all ${viewMode === 'canvas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                 <Layout className="w-3.5 h-3.5" /><span>Canvas</span>
-               </button>
-               <button onClick={() => setViewMode('list')} className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-2 transition-all ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                 <List className="w-3.5 h-3.5" /><span>List</span>
-               </button>
-            </div>
-          </div>
-
-          {/* Workflow Content */}
-          <div className="bg-white rounded-3xl border border-slate-200 min-h-[600px] overflow-hidden shadow-sm relative">
-             {viewMode === 'canvas' ? (
-                <VisualCanvas 
-                  steps={steps} 
-                  onSelectNode={(s) => { setSelectedStep(s); /* open edit mode */ }}
-                  onAddNode={(parentId) => { setNewParentId(parentId); setStepNodeType('ACTION'); setShowStepForm(true); }}
-                />
-             ) : (
-                <div className="p-8 max-w-2xl mx-auto">
-                    <div className="flex items-center justify-between mb-8">
-                       <h2 className="text-lg font-bold text-slate-900">Timeline List</h2>
-                       <button onClick={() => { setNewParentId(steps[steps.length-1]?.id); setStepNodeType('ACTION'); setShowStepForm(true); }} className="px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center space-x-2">
-                          <Plus className="w-4 h-4" /><span>Add End Step</span>
-                       </button>
-                    </div>
-
-                    {steps.length === 0 ? (
-                      <div className="text-center py-20 border-2 border-dashed border-slate-100 rounded-3xl">
-                        <p className="text-slate-400 font-medium">No steps yet. Use the Canvas or Add Step to begin.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-0 relative">
-                        <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-slate-100" />
-                        {steps.map((step, i) => (
-                           <div key={step.id} className="relative flex items-start space-x-4 py-4 group">
-                             <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 z-10 font-bold text-xs ring-4 ring-white ${step.day_of_week !== undefined ? DAY_COLORS[step.day_of_week] : 'bg-slate-100 text-slate-600'}`}>
-                                <span className="text-[10px] font-extrabold">{step.day_of_week !== undefined ? DAY_NAMES[step.day_of_week] : 'Node'}</span>
-                                <span className="text-[9px] opacity-70">{step.send_time || 'Next'}</span>
-                             </div>
-                             <div className="flex-1 bg-slate-50 rounded-2xl border border-slate-100 p-5 group-hover:bg-white group-hover:border-blue-100 group-hover:shadow-lg transition-all">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-black text-slate-400 uppercase tracking-widest">{step.node_type}</span>
-                                    <h4 className="text-sm font-bold text-slate-900">
-                                      {step.node_type === 'ACTION' ? (step.action_type === 'SEND_MESSAGE' ? 'Send Message' : `Add Tag: ${step.action_value}`) : 
-                                       step.node_type === 'CONDITION' ? `Condition: ${step.condition_config?.field}` : `Wait: ${step.wait_config?.amount} ${step.wait_config?.unit}`}
-                                    </h4>
-                                  </div>
-                                  <button onClick={() => deleteStep(step.id)} className="p-2 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all"><Trash2 className="w-4 h-4" /></button>
-                                </div>
-                                {step.message_template && <p className="mt-2 text-xs text-slate-500 italic line-clamp-2">"{step.message_template}"</p>}
-                             </div>
-                           </div>
-                        ))}
-                      </div>
-                    )}
-                </div>
-             )}
-          </div>
-        </div>
-
-        {/* Step Form Modal Overlay */}
-        {showStepForm && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-             <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
-                   <h3 className="font-bold text-lg">Add Workspace Node</h3>
-                   <button onClick={() => setShowStepForm(false)} className="p-2 hover:bg-slate-800 rounded-xl transition-all"><X className="w-5 h-5" /></button>
-                </div>
-                
-                <div className="p-8 space-y-6">
-                   {/* Node Type Selector */}
-                   <div className="grid grid-cols-3 gap-3">
-                      {[
-                        { id:'ACTION', icon:MessageCircle, label:'Action', color:'blue' },
-                        { id:'CONDITION', icon:Filter, label:'If / Else', color:'amber' },
-                        { id:'WAIT', icon:Clock, label:'Wait', color:'indigo' }
-                      ].map(type => (
-                        <button key={type.id} onClick={() => setStepNodeType(type.id as any)} className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${stepNodeType === type.id ? `border-${type.color}-500 bg-${type.color}-50` : 'border-slate-100 bg-slate-50 grayscale opacity-60'}`}>
-                           <type.icon className={`w-6 h-6 mb-2 ${stepNodeType === type.id ? `text-${type.color}-600` : 'text-slate-400'}`} />
-                           <span className={`text-[10px] font-black uppercase tracking-widest ${stepNodeType === type.id ? `text-${type.color}-700` : 'text-slate-500'}`}>{type.label}</span>
-                        </button>
-                      ))}
-                   </div>
-
-                   {/* Conditional Branching Header (if child of Condition) */}
-                   {steps.find(s => s.id === newParentId)?.node_type === 'CONDITION' && (
-                      <div className="space-y-3">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Select Branch Path</label>
-                        <div className="flex space-x-2">
-                           <button onClick={() => setNewBranchType('YES')} className={`flex-1 py-3 rounded-xl border-2 font-bold text-sm transition-all ${newBranchType === 'YES' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>YES Path</button>
-                           <button onClick={() => setNewBranchType('NO')} className={`flex-1 py-3 rounded-xl border-2 font-bold text-sm transition-all ${newBranchType === 'NO' ? 'bg-rose-50 border-rose-500 text-rose-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>NO Path</button>
-                        </div>
-                      </div>
-                   )}
-
-                   <div className="space-y-4">
-                      {stepNodeType === 'ACTION' && (
-                        <>
-                          <div className="flex space-x-2">
-                            {DAY_NAMES.map((name, i) => (
-                              <button key={name} onClick={() => setStepDay(i)} className={`flex-1 py-2 text-[10px] font-bold rounded-lg border transition-all ${stepDay === i ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-200'}`}>{name}</button>
-                            ))}
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Time (24h)</label>
-                            <input type="time" value={stepTime} onChange={e => setStepTime(e.target.value)} className="w-full bg-slate-50 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Action</label>
-                            <select value={stepAction} onChange={e => setStepAction(e.target.value)} className="w-full bg-slate-50 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500">
-                               <option value="SEND_MESSAGE">Send LINE Message</option>
-                               <option value="ADD_TAG">Add Tag</option>
-                               <option value="REMOVE_TAG">Remove Tag</option>
-                            </select>
-                          </div>
-                          {stepAction === 'SEND_MESSAGE' ? (
-                            <div>
-                               <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Message Template</label>
-                               <textarea value={stepMessage} onChange={e => setStepMessage(e.target.value)} placeholder="Hello {{name}}..." rows={4} className="w-full bg-slate-50 border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-blue-500" />
-                            </div>
-                          ) : (
-                            <div>
-                               <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Tag Name</label>
-                               <input type="text" value={stepTagVal} onChange={e => setStepTagVal(e.target.value)} placeholder="Interested" className="w-full bg-slate-50 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500" />
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      {stepNodeType === 'WAIT' && (
-                        <div className="flex space-x-4">
-                           <div className="flex-1">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Amount</label>
-                              <input type="number" value={waitAmount} onChange={e => setWaitAmount(parseInt(e.target.value))} className="w-full bg-slate-50 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500" />
-                           </div>
-                           <div className="flex-1">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Unit</label>
-                              <select value={waitUnit} onChange={e => setWaitUnit(e.target.value)} className="w-full bg-slate-50 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500">
-                                 <option value="minutes">Minutes</option>
-                                 <option value="hours">Hours</option>
-                                 <option value="days">Days</option>
-                              </select>
-                           </div>
-                        </div>
-                      )}
-
-                      {stepNodeType === 'CONDITION' && (
-                        <div className="space-y-4">
-                           <p className="text-xs text-slate-400 italic">Contacts will split based on this condition.</p>
-                           <div>
-                              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Field</label>
-                              <select value={condField} onChange={e => setCondField(e.target.value)} className="w-full bg-slate-50 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500">
-                                 <option value="attended">Attended Webinar</option>
-                                 <option value="purchased">Product Purchased</option>
-                                 <option value="tags">Has Tag</option>
-                              </select>
-                           </div>
-                           <div className="flex space-x-2">
-                              <input type="text" readOnly value={condOp} className="w-16 bg-slate-100 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-center" />
-                              <input type="text" value={condVal} onChange={e => setCondVal(e.target.value)} placeholder="true" className="flex-1 bg-slate-50 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-1 focus:ring-blue-500" />
-                           </div>
-                        </div>
-                      )}
-                   </div>
-
-                   <div className="pt-4">
-                      <button onClick={addStep} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition-all">Create Node</button>
-                   </div>
-                </div>
-             </div>
-          </div>
-        )}
-      </div>
+      <WorkflowBuilder
+        workflow={selectedWf}
+        initialSteps={steps as any}
+        onBack={() => { setSelectedWf(null); setSteps([]); }}
+      />
     );
   }
 
@@ -3212,10 +2866,12 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                   <div className="space-y-3">
                     <select value={wfTrigger} onChange={e => setWfTrigger(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="TAG_ADDED">When Tag Added</option>
+                      <option value="TAG_REMOVED">When Tag Removed</option>
                       <option value="USER_FOLLOW">When User Follows</option>
+                      <option value="KEYWORD_RECEIVED">When Keyword Received</option>
                       <option value="MANUAL">Manual Enrollment</option>
                     </select>
-                    <input type="text" value={wfTriggerVal} onChange={e => setWfTriggerVal(e.target.value)} placeholder={wfTrigger === 'USER_FOLLOW' ? 'FOLLOW' : 'Tag Name'} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={wfTriggerVal} onChange={e => setWfTriggerVal(e.target.value)} placeholder={wfTrigger === 'USER_FOLLOW' ? 'FOLLOW' : wfTrigger === 'KEYWORD_RECEIVED' ? 'Keyword (e.g. interested)' : 'Tag Name'} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
                 <div className="flex justify-end space-x-3">

@@ -49,6 +49,7 @@ export async function POST(req: Request) {
       action_value: body.action_value || '',
       wait_config: body.wait_config,
       condition_config: body.condition_config,
+      schedule_config: body.schedule_config,
       position: body.position
     }).select().single();
 
@@ -69,6 +70,24 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Error updating step';
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
+}
+
+// BULK UPDATE positions
+export async function PUT(req: Request) {
+  try {
+    const { positions } = await req.json();
+    if (!Array.isArray(positions)) throw new Error('positions array is required');
+    for (const p of positions) {
+      await supabase.from('workflow_steps').update({
+        position_x: p.position_x,
+        position_y: p.position_y,
+      }).eq('id', p.id);
+    }
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Error saving positions';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

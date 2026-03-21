@@ -88,6 +88,18 @@ export async function GET() {
             const newTags = currentTags.filter((t: string) => t !== actionValue);
             await supabase.from('contacts').update({ tags: newTags }).eq('id', msg.contact_id);
             await supabase.from('contact_history').insert({ contact_id: msg.contact_id, action: `Tag Removed [Workflow]: ${actionValue}` });
+          } else if (actionType === 'ENROLL_WORKFLOW') {
+            const { enrollContactInWorkflow } = await import('@/lib/workflow-engine');
+            await enrollContactInWorkflow(actionValue, msg.contact_id);
+            await supabase.from('contact_history').insert({ contact_id: msg.contact_id, action: `Workflow Enrolled [Auto]: ${actionValue}` });
+          } else if (actionType === 'REMOVE_FROM_WORKFLOW') {
+            const { data: enrollments } = await supabase.from('workflow_enrollments').select('id').eq('workflow_id', actionValue).eq('contact_id', msg.contact_id).eq('status', 'active');
+            for (const e of enrollments || []) {
+              await supabase.from('workflow_enrollments').update({ status: 'cancelled', completed_at: new Date().toISOString() }).eq('id', e.id);
+              await supabase.from('workflow_waiting').delete().eq('enrollment_id', e.id);
+              await supabase.from('message_queue').update({ status: 'cancelled' }).eq('enrollment_id', e.id).eq('status', 'queued');
+            }
+            await supabase.from('contact_history').insert({ contact_id: msg.contact_id, action: `Workflow Removed [Auto]: ${actionValue}` });
           }
           actionSuccess = true;
         } else {

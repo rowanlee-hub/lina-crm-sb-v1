@@ -317,6 +317,12 @@ export async function POST(req: Request) {
             processAutomations('TAG_ADDED', tag, contactId, userId);
           }
         }
+
+        // Trigger KEYWORD_RECEIVED workflows for the raw message text
+        if (contactId) {
+          const { processAutomations } = await import('@/lib/automation-engine');
+          processAutomations('KEYWORD_RECEIVED', messageText, contactId, userId);
+        }
       }
     }
 

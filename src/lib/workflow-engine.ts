@@ -136,7 +136,8 @@ export async function executeWorkflowNode(
     const amount = step.wait_config?.amount || 1;
     const unit = step.wait_config?.unit || 'days';
     const waitDate = new Date();
-    if (unit === 'minutes') waitDate.setMinutes(waitDate.getMinutes() + amount);
+    if (unit === 'seconds') waitDate.setSeconds(waitDate.getSeconds() + amount);
+    else if (unit === 'minutes') waitDate.setMinutes(waitDate.getMinutes() + amount);
     else if (unit === 'hours') waitDate.setHours(waitDate.getHours() + amount);
     else waitDate.setDate(waitDate.getDate() + amount);
 
@@ -171,6 +172,15 @@ export async function executeWorkflowNode(
 
     if (step.action_type === 'SEND_MESSAGE') {
       actionPayload.message = renderTemplate(step.message_template, contact);
+    } else if (step.action_type === 'SCHEDULE_MESSAGE') {
+      actionPayload.message = renderTemplate(step.message_template, contact);
+      if (step.schedule_config?.scheduled_at) {
+        actionPayload.scheduled_at = new Date(step.schedule_config.scheduled_at).toISOString();
+      }
+    } else if (step.action_type === 'ENROLL_WORKFLOW') {
+      actionPayload.message = `__ACTION__:ENROLL_WORKFLOW:${step.action_value}`;
+    } else if (step.action_type === 'REMOVE_FROM_WORKFLOW') {
+      actionPayload.message = `__ACTION__:REMOVE_FROM_WORKFLOW:${step.action_value}`;
     } else {
       actionPayload.message = `__ACTION__:${step.action_type}:${step.action_value}`;
     }
