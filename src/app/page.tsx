@@ -174,6 +174,12 @@ function CRMDashboard() {
   const [isDeduping, setIsDeduping] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Pagination state
+  const [contactsPage, setContactsPage] = useState(1);
+  const [contactsTotal, setContactsTotal] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const PAGE_SIZE = 100;
+
   // API States
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
@@ -201,22 +207,45 @@ function CRMDashboard() {
 
   // Fetch contacts on mount + real-time subscriptions
   useEffect(() => {
-    fetchContacts();
+    fetchContacts(1);
     fetch('/api/settings?key=active_webinar_date').then(r => r.json()).then(d => { if (d.value) setActiveWebinarDate(d.value); }).catch(() => {});
 
-    // Real-time: watch contacts table for any changes
+    // Real-time: watch contacts table for changes — update in-place instead of full refetch
     const contactChannel = supabase
       .channel('contacts_realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'contacts' }, (payload) => {
-        // New contact added — refetch to get full formatted data
-        fetchContacts();
+        const n = payload.new as any;
+        const newContact: Contact = {
+          id: n.id, name: n.name || '', email: n.email || '', phone: n.phone || '',
+          lineId: n.line_id || '', tags: n.tags || [], status: n.status || 'Lead',
+          webinar: { link: n.webinar_link || '', dateTime: n.webinar_date || '' },
+          notes: n.notes || '', ghl_contact_id: n.ghl_contact_id || '', uid: n.uid || '',
+          attended: n.attended || false, purchased: n.purchased || false,
+          follow_up_note: n.follow_up_note || '', history: [],
+        };
+        setContacts(prev => {
+          if (prev.some(c => c.id === n.id)) return prev;
+          return [newContact, ...prev];
+        });
+        setContactsTotal(prev => prev + 1);
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'contacts' }, () => {
-        // Full refetch ensures all fields (including line_id) are always current
-        fetchContacts();
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'contacts' }, (payload) => {
+        const n = payload.new as any;
+        setContacts(prev => prev.map(c => {
+          if (c.id !== n.id) return c;
+          return {
+            ...c, name: n.name || '', email: n.email || '', phone: n.phone || '',
+            lineId: n.line_id || '', tags: n.tags || [], status: n.status || 'Lead',
+            webinar: { link: n.webinar_link || '', dateTime: n.webinar_date || '' },
+            notes: n.notes || '', ghl_contact_id: n.ghl_contact_id || '', uid: n.uid || '',
+            attended: n.attended || false, purchased: n.purchased || false,
+            follow_up_note: n.follow_up_note || '',
+          };
+        }));
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'contacts' }, (payload) => {
         setContacts(prev => prev.filter(c => c.id !== payload.old.id));
+        setContactsTotal(prev => Math.max(0, prev - 1));
       })
       .subscribe();
 
@@ -239,20 +268,39 @@ function CRMDashboard() {
     };
   }, []);
 
-  const fetchContacts = async () => {
-    setIsLoading(true);
+  const fetchContacts = async (page: number, append = false) => {
+    if (page === 1) setIsLoading(true);
+    else setIsLoadingMore(true);
     setFetchError("");
     try {
-      const response = await fetch(`${CONTACTS_API}?all=true`, { cache: 'no-store' });
+      const response = await fetch(`${CONTACTS_API}?page=${page}&limit=${PAGE_SIZE}`, { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch data from Supabase backend");
 
-      const data: Contact[] = await response.json();
-      setContacts(data);
+      const result = await response.json();
+      const data: Contact[] = result.data;
+      setContactsTotal(result.total);
+      setContactsPage(page);
+      if (append) {
+        setContacts(prev => {
+          const existingIds = new Set(prev.map(c => c.id));
+          const newOnes = data.filter(c => !existingIds.has(c.id));
+          return [...prev, ...newOnes];
+        });
+      } else {
+        setContacts(data);
+      }
     } catch (error) {
       console.error("Error fetching contacts:", error);
       setFetchError("Failed to load contacts from the database. Please check your Supabase connection.");
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  };
+
+  const loadMoreContacts = () => {
+    if (contacts.length < contactsTotal && !isLoadingMore) {
+      fetchContacts(contactsPage + 1, true);
     }
   };
 
@@ -263,7 +311,7 @@ function CRMDashboard() {
       const data = await res.json();
       if (data.success) {
         alert(data.message);
-        fetchContacts();
+        fetchContacts(1);
       } else {
         alert(`Dedup failed: ${data.error}`);
       }
@@ -448,7 +496,7 @@ function CRMDashboard() {
         const data = await res.json();
         if (data.success) {
           alert(`Import successful: ${data.results.updated} updated, ${data.results.created} created.`);
-          fetchContacts();
+          fetchContacts(1);
         } else {
           alert(`Import failed: ${data.error}`);
         }
@@ -560,7 +608,8 @@ function CRMDashboard() {
                   <p className="text-xs text-slate-400 font-medium mt-0.5">
                     {filteredContacts.length !== contacts.length
                       ? <><span className="text-blue-600 font-bold">{filteredContacts.length}</span> of {contacts.length}</>
-                      : <span className="font-bold">{contacts.length}</span>} contacts
+                      : <span className="font-bold">{contacts.length}</span>}
+                    {contactsTotal > contacts.length && <> / {contactsTotal}</>} contacts
                   </p>
                 )}
               </div>
@@ -718,6 +767,17 @@ function CRMDashboard() {
                 </button>
               )}))
             }
+            {/* Load More button */}
+            {activeTab === 'contacts' && !isLoading && contacts.length < contactsTotal && (
+              <button
+                onClick={loadMoreContacts}
+                disabled={isLoadingMore}
+                className="w-full py-3 mt-2 rounded-xl text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {isLoadingMore ? 'Loading...' : `Load More (${contacts.length} of ${contactsTotal})`}
+              </button>
+            )}
           </div>
 
           {/* ── FILTER DRAWER (scoped inside PANE 1) ─────────────────── */}
@@ -850,7 +910,7 @@ function CRMDashboard() {
                 <button onClick={() => setSheetMode(false)} className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all" title="Back to list view">
                   <List className="w-4 h-4" />
                 </button>
-                <span className="text-sm font-bold text-slate-700">Sheet View — {filteredContacts.length} contacts</span>
+                <span className="text-sm font-bold text-slate-700">Sheet View — {filteredContacts.length}{contactsTotal > contacts.length ? ` / ${contactsTotal}` : ''} contacts</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="relative group">
@@ -918,6 +978,19 @@ function CRMDashboard() {
                   })()}
                 </tbody>
               </table>
+              {/* Load More in sheet view */}
+              {contacts.length < contactsTotal && (
+                <div className="flex justify-center py-4">
+                  <button
+                    onClick={loadMoreContacts}
+                    disabled={isLoadingMore}
+                    className="px-6 py-2 rounded-lg text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {isLoadingMore ? 'Loading...' : `Load More (${contacts.length} of ${contactsTotal})`}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ) : activeTab === 'link' ? (
