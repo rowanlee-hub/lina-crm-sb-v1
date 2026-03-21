@@ -454,12 +454,10 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
             <button
               onClick={saveWorkflow}
               disabled={savingWf}
-              className={`px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all border ${
+              className={`px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
                 savedWf
-                  ? 'bg-emerald-500 text-white border-emerald-500'
-                  : isDirty
-                  ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
-                  : 'bg-white text-slate-500 border-slate-300 hover:border-blue-400 hover:text-blue-500'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
             >
               {savedWf ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
@@ -467,22 +465,6 @@ export default function WorkflowBuilder({ workflow, initialSteps, onBack }: Work
             </button>
           </div>
         </div>
-      </div>
-
-      {/* ─── Floating Save Button ───────────────────────────────── */}
-      <div className="fixed top-4 right-4 z-[999]">
-        <button
-          onClick={saveWorkflow}
-          disabled={savingWf}
-          className={`px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-xl transition-all border ${
-            savedWf
-              ? 'bg-emerald-500 text-white border-emerald-500 shadow-emerald-200'
-              : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-blue-200'
-          }`}
-        >
-          {savedWf ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          <span>{savedWf ? 'Saved!' : savingWf ? 'Saving…' : 'Save'}</span>
-        </button>
       </div>
 
       {/* Canvas / List */}
