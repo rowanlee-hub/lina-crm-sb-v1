@@ -61,6 +61,106 @@ const getAllUniqueTags = (contacts: Contact[]): string[] => {
   return Array.from(tagsSet).sort();
 };
 
+// Sheet row component — extracted for virtual scroll performance
+const SheetRow = React.memo(function SheetRow({ contact, idx, editingCell, setEditingCell, cellDraft, setCellDraft, savingCell, saveCell, sheetCopied, setSheetCopied, onOpen }: {
+  contact: Contact; idx: number;
+  editingCell: { contactId: string; field: string } | null; setEditingCell: (v: { contactId: string; field: string } | null) => void;
+  cellDraft: string; setCellDraft: (v: string) => void;
+  savingCell: string | null; saveCell: (c: Contact, f: string, v: string) => void;
+  sheetCopied: string | null; setSheetCopied: (v: string | null) => void;
+  onOpen: (id: string) => void;
+}) {
+  const STATUSES = ['Lead', 'Nurturing', 'Customer', 'Closed'];
+
+  const copyToClipboard = (text: string, key: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setSheetCopied(key);
+    setTimeout(() => setSheetCopied(null), 1500);
+  };
+
+  const renderCell = (field: string, displayValue: string) => {
+    const cellKey = `${contact.id}:${field}`;
+    const isEditing = editingCell?.contactId === contact.id && editingCell?.field === field;
+    const isSaving = savingCell === cellKey;
+    const isCopied = sheetCopied === cellKey;
+
+    if (isSaving) return <span className="text-slate-400 italic text-xs">Saving…</span>;
+    if (isEditing) {
+      if (field === 'status') {
+        return (
+          <select autoFocus value={cellDraft} onChange={e => setCellDraft(e.target.value)} onBlur={() => saveCell(contact, field, cellDraft)} className="w-full text-xs border border-blue-400 rounded px-1.5 py-1 outline-none bg-white">
+            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        );
+      }
+      if (field === 'notes') {
+        return <textarea autoFocus value={cellDraft} onChange={e => setCellDraft(e.target.value)} onBlur={() => saveCell(contact, field, cellDraft)} rows={3} className="w-full text-xs border border-blue-400 rounded px-1.5 py-1 outline-none resize-none bg-white" />;
+      }
+      return (
+        <input autoFocus type="text" value={cellDraft} onChange={e => setCellDraft(e.target.value)} onBlur={() => saveCell(contact, field, cellDraft)}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingCell(null); }}
+          className="w-full text-xs border border-blue-400 rounded px-1.5 py-1 outline-none bg-white" />
+      );
+    }
+    return (
+      <div className="group/cell flex items-center gap-1 w-full min-h-[22px]">
+        <span onClick={() => { setEditingCell({ contactId: contact.id, field }); setCellDraft(displayValue); }}
+          className="flex-1 cursor-text hover:bg-blue-50 rounded px-1 py-0.5 truncate text-xs text-slate-700 min-w-0" title={displayValue || 'Click to edit'}>
+          {displayValue || <span className="text-slate-300 italic">—</span>}
+        </span>
+        {displayValue && (
+          <button onClick={(e) => { e.stopPropagation(); copyToClipboard(displayValue, cellKey); }}
+            className={`shrink-0 p-0.5 rounded transition-all ${isCopied ? 'text-green-500' : 'text-slate-300 opacity-0 group-hover/cell:opacity-100 hover:text-blue-500'}`} title="Copy">
+            {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <tr className={`border-b border-slate-100 hover:bg-slate-50/60 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`} style={{ height: 37 }}>
+      <td className="px-3 py-2 text-[10px] text-slate-400 font-mono">{idx + 1}</td>
+      <td className="px-2 py-1.5 border-l border-slate-100 font-medium">{renderCell('name', contact.name)}</td>
+      <td className="px-2 py-1.5 border-l border-slate-100">{renderCell('email', contact.email)}</td>
+      <td className="px-2 py-1.5 border-l border-slate-100">{renderCell('phone', contact.phone)}</td>
+      <td className="px-2 py-1.5 border-l border-slate-100">{renderCell('tags', (contact.tags || []).join(', '))}</td>
+      <td className="px-2 py-1.5 border-l border-slate-100">
+        {editingCell?.contactId === contact.id && editingCell?.field === 'status' ? renderCell('status', contact.status) : (
+          <span onClick={() => { setEditingCell({ contactId: contact.id, field: 'status' }); setCellDraft(contact.status || 'Lead'); }}
+            className={`inline-block cursor-pointer px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              contact.status === 'Customer' ? 'bg-emerald-100 text-emerald-700' :
+              contact.status === 'Closed' ? 'bg-slate-200 text-slate-500' :
+              contact.status === 'Nurturing' ? 'bg-blue-100 text-blue-700' :
+              'bg-amber-100 text-amber-700'
+            }`}>
+            {contact.status || 'Lead'}
+          </span>
+        )}
+      </td>
+      <td className="px-2 py-1.5 border-l border-slate-100 max-w-[200px]">{renderCell('webinarLink', contact.webinar?.link || '')}</td>
+      <td className="px-2 py-1.5 border-l border-slate-100 max-w-[220px]">{renderCell('notes', contact.notes || '')}</td>
+      <td className="px-2 py-1.5 border-l border-slate-100">
+        <div className="group/cell flex items-center gap-1">
+          <span className="text-xs text-slate-400 font-mono truncate">{contact.lineId ? `${contact.lineId.substring(0, 12)}…` : <span className="text-slate-200 italic">—</span>}</span>
+          {contact.lineId && (
+            <button onClick={() => copyToClipboard(contact.lineId, `${contact.id}:lineId`)}
+              className={`shrink-0 p-0.5 rounded transition-all ${sheetCopied === `${contact.id}:lineId` ? 'text-green-500' : 'text-slate-300 opacity-0 group-hover/cell:opacity-100 hover:text-blue-500'}`} title="Copy LINE ID">
+              {sheetCopied === `${contact.id}:lineId` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+            </button>
+          )}
+        </div>
+      </td>
+      <td className="px-2 py-1.5 border-l border-slate-100">
+        <button onClick={() => onOpen(contact.id)} className="text-[10px] text-blue-500 hover:text-blue-700 font-bold" title="Open detail">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </td>
+    </tr>
+  );
+});
+
 function CRMDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -96,6 +196,8 @@ function CRMDashboard() {
   const [cellDraft, setCellDraft] = useState('');
   const [savingCell, setSavingCell] = useState<string | null>(null);
   const [sheetCopied, setSheetCopied] = useState<string | null>(null);
+  const sheetScrollRef = useRef<HTMLDivElement>(null);
+  const [sheetScrollTop, setSheetScrollTop] = useState(0);
 
   // Fetch contacts on mount + real-time subscriptions
   useEffect(() => {
@@ -765,8 +867,13 @@ function CRMDashboard() {
               </div>
             </div>
 
-            {/* Sheet table */}
-            <div className="flex-1 overflow-auto">
+            {/* Sheet table — virtualized */}
+            <div className="flex-1 overflow-auto" ref={sheetScrollRef} onScroll={() => {
+              if (sheetScrollRef.current) {
+                const st = sheetScrollRef.current.scrollTop;
+                if (Math.abs(st - sheetScrollTop) > 10) setSheetScrollTop(st);
+              }
+            }}>
               <table className="w-full text-sm border-collapse min-w-[1300px]">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-slate-50 border-b border-slate-200">
@@ -787,132 +894,28 @@ function CRMDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredContacts.map((contact, idx) => {
-                    const STATUSES = ['Lead', 'Nurturing', 'Customer', 'Closed'];
-                    const copyToClipboard = (text: string, key: string) => {
-                      if (!text) return;
-                      navigator.clipboard.writeText(text);
-                      setSheetCopied(key);
-                      setTimeout(() => setSheetCopied(null), 1500);
-                    };
-
-                    const renderCell = (field: string, displayValue: string) => {
-                      const cellKey = `${contact.id}:${field}`;
-                      const isEditing = editingCell?.contactId === contact.id && editingCell?.field === field;
-                      const isSaving = savingCell === cellKey;
-                      const isCopied = sheetCopied === cellKey;
-
-                      if (isSaving) {
-                        return <span className="text-slate-400 italic text-xs">Saving…</span>;
-                      }
-                      if (isEditing) {
-                        if (field === 'status') {
-                          return (
-                            <select
-                              autoFocus
-                              value={cellDraft}
-                              onChange={e => setCellDraft(e.target.value)}
-                              onBlur={() => saveCell(contact, field, cellDraft)}
-                              className="w-full text-xs border border-blue-400 rounded px-1.5 py-1 outline-none bg-white"
-                            >
-                              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          );
-                        }
-                        if (field === 'notes') {
-                          return (
-                            <textarea
-                              autoFocus
-                              value={cellDraft}
-                              onChange={e => setCellDraft(e.target.value)}
-                              onBlur={() => saveCell(contact, field, cellDraft)}
-                              rows={3}
-                              className="w-full text-xs border border-blue-400 rounded px-1.5 py-1 outline-none resize-none bg-white"
-                            />
-                          );
-                        }
-                        return (
-                          <input
-                            autoFocus
-                            type="text"
-                            value={cellDraft}
-                            onChange={e => setCellDraft(e.target.value)}
-                            onBlur={() => saveCell(contact, field, cellDraft)}
-                            onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } if (e.key === 'Escape') { setEditingCell(null); } }}
-                            className="w-full text-xs border border-blue-400 rounded px-1.5 py-1 outline-none bg-white"
-                          />
-                        );
-                      }
-                      return (
-                        <div className="group/cell flex items-center gap-1 w-full min-h-[22px]">
-                          <span
-                            onClick={() => { setEditingCell({ contactId: contact.id, field }); setCellDraft(displayValue); }}
-                            className="flex-1 cursor-text hover:bg-blue-50 rounded px-1 py-0.5 truncate text-xs text-slate-700 min-w-0"
-                            title={displayValue || 'Click to edit'}
-                          >
-                            {displayValue || <span className="text-slate-300 italic">—</span>}
-                          </span>
-                          {displayValue && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); copyToClipboard(displayValue, cellKey); }}
-                              className={`shrink-0 p-0.5 rounded transition-all ${isCopied ? 'text-green-500' : 'text-slate-300 opacity-0 group-hover/cell:opacity-100 hover:text-blue-500'}`}
-                              title="Copy"
-                            >
-                              {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    };
-
+                  {/* Virtual scroll spacer — top */}
+                  {(() => {
+                    const ROW_H = 37;
+                    const BUFFER = 20;
+                    const containerH = sheetScrollRef.current?.clientHeight || 800;
+                    const startIdx = Math.max(0, Math.floor(sheetScrollTop / ROW_H) - BUFFER);
+                    const visibleCount = Math.ceil(containerH / ROW_H) + BUFFER * 2;
+                    const endIdx = Math.min(filteredContacts.length, startIdx + visibleCount);
+                    const topPad = startIdx * ROW_H;
+                    const bottomPad = Math.max(0, (filteredContacts.length - endIdx) * ROW_H);
+                    const visibleSlice = filteredContacts.slice(startIdx, endIdx);
                     return (
-                      <tr key={contact.id} className={`border-b border-slate-100 hover:bg-slate-50/60 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                        <td className="px-3 py-2 text-[10px] text-slate-400 font-mono">{idx + 1}</td>
-                        <td className="px-2 py-1.5 border-l border-slate-100 font-medium">{renderCell('name', contact.name)}</td>
-                        <td className="px-2 py-1.5 border-l border-slate-100">{renderCell('email', contact.email)}</td>
-                        <td className="px-2 py-1.5 border-l border-slate-100">{renderCell('phone', contact.phone)}</td>
-                        <td className="px-2 py-1.5 border-l border-slate-100">
-                          {renderCell('tags', (contact.tags || []).join(', '))}
-                        </td>
-                        <td className="px-2 py-1.5 border-l border-slate-100">
-                          {editingCell?.contactId === contact.id && editingCell?.field === 'status' ? renderCell('status', contact.status) : (
-                            <span
-                              onClick={() => { setEditingCell({ contactId: contact.id, field: 'status' }); setCellDraft(contact.status || 'Lead'); }}
-                              className={`inline-block cursor-pointer px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                contact.status === 'Customer' ? 'bg-emerald-100 text-emerald-700' :
-                                contact.status === 'Closed' ? 'bg-slate-200 text-slate-500' :
-                                contact.status === 'Nurturing' ? 'bg-blue-100 text-blue-700' :
-                                'bg-amber-100 text-amber-700'
-                              }`}
-                            >
-                              {contact.status || 'Lead'}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 border-l border-slate-100 max-w-[200px]">{renderCell('webinarLink', contact.webinar?.link || '')}</td>
-                        <td className="px-2 py-1.5 border-l border-slate-100 max-w-[220px]">{renderCell('notes', contact.notes || '')}</td>
-                        <td className="px-2 py-1.5 border-l border-slate-100">
-                          <div className="group/cell flex items-center gap-1">
-                            <span className="text-xs text-slate-400 font-mono truncate">{contact.lineId ? `${contact.lineId.substring(0, 12)}…` : <span className="text-slate-200 italic">—</span>}</span>
-                            {contact.lineId && (
-                              <button
-                                onClick={() => copyToClipboard(contact.lineId, `${contact.id}:lineId`)}
-                                className={`shrink-0 p-0.5 rounded transition-all ${sheetCopied === `${contact.id}:lineId` ? 'text-green-500' : 'text-slate-300 opacity-0 group-hover/cell:opacity-100 hover:text-blue-500'}`}
-                                title="Copy LINE ID"
-                              >
-                                {sheetCopied === `${contact.id}:lineId` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-2 py-1.5 border-l border-slate-100">
-                          <button onClick={() => handleContactClick(contact.id)} className="text-[10px] text-blue-500 hover:text-blue-700 font-bold" title="Open detail">
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
+                      <>
+                        {topPad > 0 && <tr style={{ height: topPad }}><td colSpan={10} /></tr>}
+                        {visibleSlice.map((contact, i) => {
+                          const idx = startIdx + i;
+                          return (<SheetRow key={contact.id} contact={contact} idx={idx} editingCell={editingCell} setEditingCell={setEditingCell} cellDraft={cellDraft} setCellDraft={setCellDraft} savingCell={savingCell} saveCell={saveCell} sheetCopied={sheetCopied} setSheetCopied={setSheetCopied} onOpen={handleContactClick} />);
+                        })}
+                        {bottomPad > 0 && <tr style={{ height: bottomPad }}><td colSpan={10} /></tr>}
+                      </>
                     );
-                  })}
+                  })()}
                 </tbody>
               </table>
             </div>
