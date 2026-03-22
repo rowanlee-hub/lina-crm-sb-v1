@@ -3356,7 +3356,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                       <select value={wbDaysBefore} onChange={e => setWbDaysBefore(Number(e.target.value))}
                         className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
                         {[6,5,4,3,2,1,0].map(d => (
-                          <option key={d} value={d}>{d === 0 ? 'D-0 (Day of webinar)' : `D-${d} (${d} day${d>1?'s':''} before)`}</option>
+                          <option key={d} value={d}>{['Wednesday (Webinar Day)','Tuesday (D-1)','Monday (D-2)','Sunday (D-3)','Saturday (D-4)','Friday (D-5)','Thursday (D-6)'][d]}</option>
                         ))}
                       </select>
                     </div>
@@ -3602,8 +3602,8 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                     <div key={step.id} className={`bg-slate-50 rounded-lg border ${wbEditingStep?.id === step.id ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200'}`}>
                       <div className="flex items-start space-x-3 p-3">
                         <div className="flex-shrink-0 w-16 text-center">
-                          <span className="text-2xl font-black text-blue-600">D-{step.days_before}</span>
-                          <p className="text-xs text-slate-400">{step.send_hour}:00</p>
+                          <span className="text-2xl font-black text-blue-600">{['Wed','Tue','Mon','Sun','Sat','Fri','Thu'][step.days_before] || `D-${step.days_before}`}</span>
+                          <p className="text-[10px] text-slate-400">D-{step.days_before} · {step.send_hour}:00</p>
                         </div>
                         <div className="flex-1 space-y-1.5">
                           <div className="flex items-center gap-1.5 mb-1">
@@ -3679,7 +3679,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                               <select value={wbDaysBefore} onChange={e => setWbDaysBefore(Number(e.target.value))}
                                 className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
                                 {[6,5,4,3,2,1,0].map(d => (
-                                  <option key={d} value={d}>{d === 0 ? 'D-0 (Day of webinar)' : `D-${d} (${d} day${d>1?'s':''} before)`}</option>
+                                  <option key={d} value={d}>{['Wednesday (Webinar Day)','Tuesday (D-1)','Monday (D-2)','Sunday (D-3)','Saturday (D-4)','Friday (D-5)','Thursday (D-6)'][d]}</option>
                                 ))}
                               </select>
                             </div>
