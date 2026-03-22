@@ -3620,7 +3620,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                       <div className="flex items-start space-x-3 p-3">
                         <div className="flex-shrink-0 w-16 text-center">
                           <span className="text-2xl font-black text-blue-600">{step.days_before >= 0 ? ['Wed','Tue','Mon','Sun','Sat','Fri','Thu'][step.days_before] || `D-${step.days_before}` : ['Wed','Thu','Fri','Sat','Sun','Mon','Tue'][-step.days_before] || `D+${-step.days_before}`}</span>
-                          <p className="text-[10px] text-slate-400">{step.days_before > 0 ? `D-${step.days_before}` : step.days_before === 0 ? 'Webinar Day' : `D+${-step.days_before}`} · {String(Math.floor(step.send_hour)).padStart(2,'0')}:{String(Math.round((step.send_hour % 1) * 100)).padStart(2,'0')}</p>
+                          <p className="text-[10px] text-slate-400">{step.days_before > 0 ? `D-${step.days_before}` : step.days_before === 0 ? 'Webinar Day' : `D+${-step.days_before}`} · {(() => { const h = Math.floor(step.send_hour); const m = Math.round((step.send_hour % 1) * 100); const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h; const ampm = h < 12 ? 'am' : 'pm'; return `${h12}:${String(m).padStart(2,'0')}${ampm}`; })()}</p>
                         </div>
                         <div className="flex-1 space-y-1.5">
                           <div className="flex items-center gap-1.5 mb-1">
