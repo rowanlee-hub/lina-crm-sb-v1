@@ -3,7 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-const LINE_BOT_ID = '@930ujtxd';
+const LINE_BOT_ID = '@439maycr';
 const WHATSAPP_URL = 'https://chat.whatsapp.com/FctyvBqBRlaJs4mPLPECZR';
 
 function WelcomeContent() {
