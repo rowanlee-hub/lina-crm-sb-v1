@@ -1785,14 +1785,23 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                         )}
                       </div>
                     </div>
-                    <div className="max-h-48 overflow-y-auto">
+                    <div className="max-h-64 overflow-y-auto">
                       {(() => {
-                        const pending = wbMessages.filter((m: any) => m.status === 'pending');
-                        const sent = wbMessages.filter((m: any) => m.status === 'sent');
-                        const other = wbMessages.filter((m: any) => !['pending', 'sent'].includes(m.status));
-                        const active = [...pending, ...sent];
-                        if (active.length === 0 && other.length === 0) {
+                        if (wbMessages.length === 0) {
                           return <p className="px-4 py-3 text-xs text-slate-400">No messages scheduled.</p>;
+                        }
+                        // Check if this is a past webinar
+                        const isPastWebinar = wbEnrollment && new Date(wbEnrollment.webinar_date) < new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }));
+                        if (isPastWebinar) {
+                          const sentCount = wbMessages.filter((m: any) => m.status === 'sent').length;
+                          const failedCount = wbMessages.filter((m: any) => m.status === 'failed').length;
+                          return (
+                            <div className="px-4 py-2.5 bg-slate-50">
+                              <p className="text-[11px] text-slate-500">
+                                Past webinar — {sentCount} sent, {wbMessages.length - sentCount - failedCount} skipped{failedCount > 0 ? `, ${failedCount} failed` : ''}
+                              </p>
+                            </div>
+                          );
                         }
                         const fmtTime = (iso: string) => {
                           const d = new Date(iso);
@@ -1803,27 +1812,22 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                           const clean = text.replace(/\n/g, ' ').trim();
                           return clean.length > 50 ? clean.substring(0, 50) + '…' : clean;
                         };
-                        return (
-                          <>
-                            {active.map((msg: any) => (
-                              <div key={msg.id} className="px-3 py-1.5 flex items-center gap-2 border-b border-slate-50 last:border-0">
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${msg.status === 'sent' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
-                                <span className="text-[10px] text-slate-500 shrink-0 w-[130px]">{fmtTime(msg.scheduled_at)}</span>
-                                <span className="text-[11px] text-slate-600 truncate">{preview(msg.message_preview || msg.step_message)}</span>
-                              </div>
-                            ))}
-                            {other.length > 0 && (
-                              <div className="px-3 py-1.5 bg-slate-50">
-                                <span className="text-[10px] text-slate-400">
-                                  {other.filter((m: any) => m.status === 'skipped').length > 0 && `${other.filter((m: any) => m.status === 'skipped').length} skipped`}
-                                  {other.filter((m: any) => m.status === 'skipped').length > 0 && other.filter((m: any) => m.status !== 'skipped').length > 0 && ' · '}
-                                  {other.filter((m: any) => m.status === 'cancelled').length > 0 && `${other.filter((m: any) => m.status === 'cancelled').length} cancelled`}
-                                  {other.filter((m: any) => m.status === 'failed').length > 0 && ` · ${other.filter((m: any) => m.status === 'failed').length} failed`}
-                                </span>
-                              </div>
-                            )}
-                          </>
-                        );
+                        // Sort: pending first, then sent, then skipped/cancelled/failed
+                        const statusOrder: Record<string, number> = { pending: 0, sent: 1, skipped: 2, cancelled: 3, failed: 4 };
+                        const sorted = [...wbMessages].sort((a: any, b: any) => (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5));
+                        return sorted.map((msg: any) => {
+                          const dotColor = msg.status === 'sent' ? 'bg-emerald-500' : msg.status === 'pending' ? 'bg-blue-500' : msg.status === 'failed' ? 'bg-red-400' : 'bg-slate-300';
+                          const textColor = msg.status === 'skipped' || msg.status === 'cancelled' ? 'text-slate-400' : 'text-slate-600';
+                          const timeColor = msg.status === 'skipped' || msg.status === 'cancelled' ? 'text-slate-300' : 'text-slate-500';
+                          return (
+                            <div key={msg.id} className={`px-3 py-1.5 flex items-center gap-2 border-b border-slate-50 last:border-0 ${msg.status === 'skipped' || msg.status === 'cancelled' ? 'bg-slate-50/50' : ''}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+                              <span className={`text-[10px] shrink-0 w-[130px] ${timeColor}`}>{fmtTime(msg.scheduled_at)}</span>
+                              <span className={`text-[11px] truncate flex-1 ${textColor}`}>{preview(msg.message_preview || msg.step_message)}</span>
+                              {msg.status !== 'pending' && <span className={`text-[9px] font-bold shrink-0 ${msg.status === 'sent' ? 'text-emerald-500' : msg.status === 'failed' ? 'text-red-400' : 'text-slate-300'}`}>{msg.status}</span>}
+                            </div>
+                          );
+                        });
                       })()}
                     </div>
                   </div>
