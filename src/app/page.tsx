@@ -305,28 +305,26 @@ function CRMDashboard() {
     }
   };
 
-  // Search: query the DB instead of filtering loaded contacts
+  // Load all contacts for instant client-side search (like Cmd+F)
+  const [allContactsLoaded, setAllContactsLoaded] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   useEffect(() => {
-    if (!searchQuery) {
-      // Restore normal paginated list when search is cleared
-      fetchContacts(1);
-      return;
-    }
+    if (!searchQuery || allContactsLoaded) return;
+    // When user starts searching but we don't have all contacts, fetch all
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await fetch(`${CONTACTS_API}?search=${encodeURIComponent(searchQuery)}&limit=200`);
+        const res = await fetch(`${CONTACTS_API}?all=true&skip_history=true`);
         const result = await res.json();
-        setContacts(result.data || []);
-        setContactsTotal(result.total || 0);
-        setContactsPage(1);
+        setContacts(Array.isArray(result) ? result : result.data || []);
+        setContactsTotal(Array.isArray(result) ? result.length : result.total || 0);
+        setAllContactsLoaded(true);
       } catch (e) {
-        console.error('Search error:', e);
+        console.error('Load all error:', e);
       } finally {
         setIsSearching(false);
       }
-    }, 350);
+    }, 100);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
