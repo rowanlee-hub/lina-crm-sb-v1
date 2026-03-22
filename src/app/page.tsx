@@ -2756,6 +2756,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   };
   const [wbEditingStep, setWbEditingStep] = useState<any>(null);
   const [wbSaving, setWbSaving] = useState(false);
+  const [wbTab, setWbTab] = useState<'sequence' | 'enrollments'>('sequence');
   const [wbTestLineId, setWbTestLineId] = useState('Uf8d4d01181381069f563e23504dc6dce');
   const [wbTestingStepId, setWbTestingStepId] = useState<string | null>(null);
   const [wbEmailPrompt, setWbEmailPrompt] = useState('');
@@ -3286,6 +3287,20 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
         {/* ── WEBINAR SEQUENCE TAB ── */}
         {tab === 'webinar' && (
           <div className="space-y-6">
+
+            {/* Sub-tabs */}
+            <div className="flex space-x-1 bg-slate-100 rounded-lg p-1">
+              <button onClick={() => setWbTab('sequence')}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-all ${wbTab === 'sequence' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                Sequence Steps
+              </button>
+              <button onClick={() => setWbTab('enrollments')}
+                className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-all ${wbTab === 'enrollments' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                Enrollments ({wbEnrollments.filter((e:any) => e.status === 'active').length})
+              </button>
+            </div>
+
+            {wbTab === 'sequence' && (<>
 
             {/* Test Panel */}
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center space-x-3">
@@ -3914,50 +3929,53 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
               )}
             </div>
 
-            {/* Enrollments */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
-              <h3 className="font-bold text-slate-800">Active Enrollments ({wbEnrollments.filter((e:any) => e.status === 'active').length})</h3>
-              {wbEnrollments.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-4">No enrollments yet. They appear automatically when GHL sends a webinar date.</p>
-              ) : (
-                <div className="space-y-2">
-                  {wbEnrollments.map((enroll: any) => {
-                    const msgs = enroll.webinar_scheduled_messages || [];
-                    const sent = msgs.filter((m: any) => m.status === 'sent').length;
-                    const pending = msgs.filter((m: any) => m.status === 'pending').length;
-                    const skipped = msgs.filter((m: any) => m.status === 'skipped').length;
-                    const contact = enroll.contacts;
-                    return (
-                      <div key={enroll.id} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{contact?.name || contact?.email || 'Unknown'}</p>
-                          <p className="text-xs text-slate-400">
-                            Webinar: {new Date(enroll.webinar_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </p>
-                          <div className="flex space-x-2 mt-1">
-                            <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">{sent} sent</span>
-                            <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">{pending} pending</span>
-                            {skipped > 0 && <span className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">{skipped} skipped</span>}
+            </>)}
+
+            {wbTab === 'enrollments' && (
+              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+                <h3 className="font-bold text-slate-800">Active Enrollments ({wbEnrollments.filter((e:any) => e.status === 'active').length})</h3>
+                {wbEnrollments.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-4">No enrollments yet. They appear automatically when GHL sends a webinar date.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {wbEnrollments.map((enroll: any) => {
+                      const msgs = enroll.webinar_scheduled_messages || [];
+                      const sent = msgs.filter((m: any) => m.status === 'sent').length;
+                      const pending = msgs.filter((m: any) => m.status === 'pending').length;
+                      const skipped = msgs.filter((m: any) => m.status === 'skipped').length;
+                      const contact = enroll.contacts;
+                      return (
+                        <div key={enroll.id} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-800 truncate">{contact?.name || contact?.email || 'Unknown'}</p>
+                            <p className="text-xs text-slate-400">
+                              Webinar: {new Date(enroll.webinar_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                            <div className="flex space-x-2 mt-1">
+                              <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">{sent} sent</span>
+                              <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">{pending} pending</span>
+                              {skipped > 0 && <span className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">{skipped} skipped</span>}
+                            </div>
                           </div>
+                          <span className={`text-xs px-2 py-1 rounded-full font-semibold ${enroll.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {enroll.status}
+                          </span>
+                          {enroll.status === 'active' && (
+                            <button onClick={async () => {
+                              if (!confirm('Cancel this enrollment? Pending messages will be skipped.')) return;
+                              await fetch(`/api/webinar-sequence/enrollments?id=${enroll.id}`, { method: 'DELETE' });
+                              fetchWebinarData();
+                            }} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded flex-shrink-0">
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full font-semibold ${enroll.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                          {enroll.status}
-                        </span>
-                        {enroll.status === 'active' && (
-                          <button onClick={async () => {
-                            if (!confirm('Cancel this enrollment? Pending messages will be skipped.')) return;
-                            await fetch(`/api/webinar-sequence/enrollments?id=${enroll.id}`, { method: 'DELETE' });
-                            fetchWebinarData();
-                          }} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded flex-shrink-0">
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
         )}
