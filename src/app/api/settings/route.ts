@@ -11,3 +11,21 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ key, value: data.value });
 }
+
+export async function POST(req: Request) {
+  try {
+    const { key, value } = await req.json();
+    if (!key) return NextResponse.json({ error: 'key required' }, { status: 400 });
+
+    const { error } = await supabase.from('settings').upsert(
+      { key, value, updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    );
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true, key, value });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Settings error';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

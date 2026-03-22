@@ -2755,6 +2755,9 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   const [wbSaving, setWbSaving] = useState(false);
   const [wbTestLineId, setWbTestLineId] = useState('Uf8d4d01181381069f563e23504dc6dce');
   const [wbTestingStepId, setWbTestingStepId] = useState<string | null>(null);
+  const [wbEmailPrompt, setWbEmailPrompt] = useState('');
+  const [wbEmailPromptSaving, setWbEmailPromptSaving] = useState(false);
+  const [wbEmailPromptLoaded, setWbEmailPromptLoaded] = useState(false);
 
   const fetchWebinarData = async () => {
     const [seq, enrolls] = await Promise.all([
@@ -2767,7 +2770,16 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
 
   // Auto-fetch webinar data when tab is active
   useEffect(() => {
-    if (tab === 'webinar') fetchWebinarData();
+    if (tab === 'webinar') {
+      fetchWebinarData();
+      if (!wbEmailPromptLoaded) {
+        fetch('/api/settings?key=webinar_email_prompt').then(r => r.json()).then(data => {
+          if (data.value) setWbEmailPrompt(data.value);
+          else setWbEmailPrompt('請發送你的電郵給我們，讓我們發送你的專屬直播連結 🔗\nPlease send us your email so we can send you your unique webinar link.');
+          setWbEmailPromptLoaded(true);
+        }).catch(() => setWbEmailPromptLoaded(true));
+      }
+    }
   }, [tab]);
 
   useEffect(() => {
@@ -3457,6 +3469,38 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                   placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 />
               </div>
+            </div>
+
+            {/* Email Prompt for contacts without webinar link */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+              <div>
+                <h3 className="font-bold text-slate-800">No-Link Email Prompt</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Appended to reminders for contacts who don&apos;t have a webinar link yet. Asks them to send their email.</p>
+              </div>
+              <textarea
+                value={wbEmailPrompt}
+                onChange={e => setWbEmailPrompt(e.target.value)}
+                rows={3}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="e.g. 請發送你的電郵給我們..."
+              />
+              <button
+                onClick={async () => {
+                  setWbEmailPromptSaving(true);
+                  try {
+                    await fetch('/api/settings', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ key: 'webinar_email_prompt', value: wbEmailPrompt }),
+                    });
+                  } catch { alert('Failed to save'); }
+                  finally { setWbEmailPromptSaving(false); }
+                }}
+                disabled={wbEmailPromptSaving}
+                className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {wbEmailPromptSaving ? 'Saving...' : 'Save'}
+              </button>
             </div>
 
             {/* Sequence Steps */}

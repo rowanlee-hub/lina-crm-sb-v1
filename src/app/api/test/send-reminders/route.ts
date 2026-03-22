@@ -46,7 +46,8 @@ export async function GET(req: Request) {
   const now = new Date().toISOString();
 
   // Email prompt for contacts without webinar_link (Message B)
-  const EMAIL_PROMPT = '\n\n---\n請發送你的電郵給我們，讓我們發送你的專屬直播連結 🔗\nPlease send us your email so we can send you your unique webinar link.';
+  const { data: emailPromptSetting } = await supabase.from('settings').select('value').eq('key', 'webinar_email_prompt').single();
+  const EMAIL_PROMPT = '\n\n---\n' + (emailPromptSetting?.value || '請發送你的電郵給我們，讓我們發送你的專屬直播連結 🔗\nPlease send us your email so we can send you your unique webinar link.');
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
