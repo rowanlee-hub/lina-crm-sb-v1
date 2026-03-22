@@ -2648,8 +2648,8 @@ interface Automation { id: string; name: string; trigger_type: string; trigger_v
 
 function AutomationsView({ initialSub }: { initialSub?: string }) {
   const router = useRouter();
-  const [tab, setTab] = useState<'workflows' | 'templates' | 'tags' | 'webinar'>(
-    (initialSub === 'rules' ? 'workflows' : initialSub as any) || 'workflows'
+  const [tab, setTab] = useState<'templates' | 'tags' | 'webinar'>(
+    (initialSub as any) || 'webinar'
   );
 
   const navigate = (sub: string) => {
@@ -3011,8 +3011,8 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-          <button onClick={() => navigate('workflows')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'workflows' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-            Workflows ({workflows.length})
+          <button onClick={() => { navigate('webinar'); fetchWebinarData(); }} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'webinar' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            Webinar Sequence
           </button>
           <button onClick={() => navigate('templates')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'templates' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             Templates ({availableTemplates.length})
@@ -3020,88 +3020,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
           <button onClick={() => navigate('tags')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'tags' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             Tags ({availableTags.length})
           </button>
-          <button onClick={() => { navigate('webinar'); fetchWebinarData(); }} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'webinar' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-            Webinar Sequence
-          </button>
         </div>
-
-        {/* ─── WORKFLOWS TAB ─────────────────────────────── */}
-        {tab === 'workflows' && (
-          <div className="space-y-4">
-            <div className="flex justify-end">
-              <button onClick={() => setShowWfForm(true)} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center space-x-2">
-                <Plus className="w-5 h-5" /><span>Create Workflow</span>
-              </button>
-            </div>
-
-            {showWfForm && (
-              <div className="bg-white border-2 border-blue-100 rounded-2xl p-5 space-y-4 shadow-lg">
-                <h3 className="font-bold text-slate-900">New Workflow</h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <input type="text" value={wfName} onChange={e => setWfName(e.target.value)} placeholder="Workflow name" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500" />
-                    <input type="text" value={wfDesc} onChange={e => setWfDesc(e.target.value)} placeholder="Description (optional)" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                  </div>
-                  <div className="space-y-3">
-                    <select value={wfTrigger} onChange={e => setWfTrigger(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="TAG_ADDED">When Tag Added</option>
-                      <option value="TAG_REMOVED">When Tag Removed</option>
-                      <option value="USER_FOLLOW">When User Follows</option>
-                      <option value="KEYWORD_RECEIVED">When Keyword Received</option>
-                      <option value="MANUAL">Manual Enrollment</option>
-                    </select>
-                    <input type="text" value={wfTriggerVal} onChange={e => setWfTriggerVal(e.target.value)} placeholder={wfTrigger === 'USER_FOLLOW' ? 'FOLLOW' : wfTrigger === 'KEYWORD_RECEIVED' ? 'Keyword (e.g. interested)' : 'Tag Name'} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                  </div>
-                </div>
-                <div className="flex justify-end space-x-3">
-                  <button onClick={() => setShowWfForm(false)} className="px-5 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-xl">Cancel</button>
-                  <button onClick={createWorkflow} disabled={!wfName} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50">Create</button>
-                </div>
-              </div>
-            )}
-
-            {/* Quick Action form (inline) */}
-            {/* Workflow list */}
-            {workflows.length > 0 ? (
-              <div className="space-y-3">
-                {workflows.map(wf => (
-                  <div key={`wf-${wf.id}`} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group" onClick={() => loadSteps(wf)}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-violet-500 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md">{wf.step_count}</div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <h3 className="font-bold text-slate-900">{wf.name}</h3>
-                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase">Multi-step</span>
-                          </div>
-                          <div className="flex items-center space-x-3 text-xs mt-1">
-                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded font-bold uppercase">{wf.trigger_type?.replace('_',' ')}</span>
-                            <span className="font-bold text-slate-600">{wf.trigger_value}</span>
-                            <span className="text-slate-400">•</span>
-                            <span className="text-emerald-600 font-bold">{wf.active_enrollments} active</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-4" onClick={e => e.stopPropagation()}>
-                        <div onClick={() => toggleWorkflow(wf.id, wf.is_active)} className={`w-12 h-6 rounded-full p-1 transition-colors cursor-pointer ${wf.is_active ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                          <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${wf.is_active ? 'translate-x-6' : 'translate-x-0'}`} />
-                        </div>
-                        <button onClick={() => deleteWorkflow(wf.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-5 h-5" /></button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center space-y-4">
-                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-blue-400 mx-auto"><Zap className="w-10 h-10 opacity-40" /></div>
-                <h3 className="text-lg font-bold text-slate-900">No Automations Yet</h3>
-                <p className="text-slate-500 max-w-sm mx-auto">Create your first automation to engage LINE leads automatically.</p>
-                <button onClick={() => setShowCreateMenu(true)} className="mt-2 px-6 py-2 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800">Get Started</button>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ─── TEMPLATES TAB ─────────────────────────────── */}
         {tab === 'templates' && (
