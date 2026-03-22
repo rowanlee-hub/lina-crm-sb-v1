@@ -3383,7 +3383,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                       <label className="text-xs text-slate-500 font-medium">Send Time</label>
                       <select value={wbSendHour} onChange={e => setWbSendHour(Number(e.target.value))}
                         className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
-                        {Array.from({length:24*6},(_,i)=>{ const h=Math.floor(i/6); const m=i%6*10; const v=h+m/100; const ampm=h<12?'am':'pm'; const h12=h===0?12:h>12?h-12:h; return <option key={i} value={v}>{String(h).padStart(2,'0')}:{String(m).padStart(2,'0')} ({h12}:{String(m).padStart(2,'0')}{ampm})</option>; })}
+                        {Array.from({length:24*6},(_,i)=>{ const h=Math.floor(i/6); const m=i%6*10; const v=h+m/100; const ampm=h<12?'am':'pm'; const h12=h===0?12:h>12?h-12:h; return <option key={i} value={v}>{h12}:{String(m).padStart(2,'0')}{ampm}</option>; })}
                       </select>
                     </div>
                   </div>
@@ -3708,9 +3708,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                               <label className="text-xs text-slate-500 font-medium">Send Time</label>
                               <select value={wbSendHour} onChange={e => setWbSendHour(Number(e.target.value))}
                                 className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
-                                {Array.from({length:24},(_,i)=>i).map(h => (
-                                  <option key={h} value={h}>{String(h).padStart(2,'0')}:00 ({h<12?`${h===0?12:h}am`:`${h===12?12:h-12}pm`})</option>
-                                ))}
+                                {Array.from({length:24*6},(_,i)=>{ const h=Math.floor(i/6); const m=i%6*10; const v=h+m/100; const ampm=h<12?'am':'pm'; const h12=h===0?12:h>12?h-12:h; return <option key={i} value={v}>{h12}:{String(m).padStart(2,'0')}{ampm}</option>; })}
                               </select>
                             </div>
                           </div>
