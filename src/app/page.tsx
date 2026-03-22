@@ -4032,8 +4032,10 @@ function LineMatchView() {
     setMergeLoading(true);
     try {
       const params = new URLSearchParams();
-      if (eq || emailSearch) params.set('email_q', eq ?? emailSearch);
-      if (lq || lineSearch) params.set('line_q', lq ?? lineSearch);
+      const eVal = eq ?? emailSearch;
+      const lVal = lq ?? lineSearch;
+      if (eVal) params.set('email_q', eVal);
+      if (lVal) params.set('line_q', lVal);
       const res = await fetch(`/api/contacts/unmatched?${params}`);
       const data = await res.json();
       setLineOnly(data.line_only || []);
@@ -4041,6 +4043,18 @@ function LineMatchView() {
     } catch { /* silent */ }
     setMergeLoading(false);
   };
+
+  // Auto-search on typing with debounce
+  const mergeSearchTimer = useRef<any>(null);
+  useEffect(() => {
+    if (linkTab !== 'merge') return;
+    if (mergeSearchTimer.current) clearTimeout(mergeSearchTimer.current);
+    mergeSearchTimer.current = setTimeout(() => {
+      fetchUnmatched(emailSearch, lineSearch);
+    }, 400);
+    return () => clearTimeout(mergeSearchTimer.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailSearch, lineSearch]);
 
   const handleMerge = async (lineContactId: string, emailContactId: string) => {
     if (!confirm('Merge these two contacts? The LINE contact will be merged into the email contact.')) return;
@@ -4102,33 +4116,23 @@ function LineMatchView() {
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
               {/* Search bars */}
               <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100">
-                <div className="p-2 flex gap-1">
+                <div className="p-2">
                   <input
                     type="text"
                     value={emailSearch}
                     onChange={e => setEmailSearch(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && fetchUnmatched(emailSearch, lineSearch)}
                     placeholder="Search email or name..."
-                    className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
                   />
-                  <button onClick={() => fetchUnmatched(emailSearch, lineSearch)}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 flex-shrink-0">
-                    Search
-                  </button>
                 </div>
-                <div className="p-2 flex gap-1">
+                <div className="p-2">
                   <input
                     type="text"
                     value={lineSearch}
                     onChange={e => setLineSearch(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && fetchUnmatched(emailSearch, lineSearch)}
                     placeholder="Search display name or user ID..."
-                    className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
                   />
-                  <button onClick={() => fetchUnmatched(emailSearch, lineSearch)}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 flex-shrink-0">
-                    Search
-                  </button>
                 </div>
               </div>
 
