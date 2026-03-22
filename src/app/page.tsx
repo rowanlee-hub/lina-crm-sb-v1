@@ -175,11 +175,8 @@ function CRMDashboard() {
   const [isDeduping, setIsDeduping] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Pagination state
-  const [contactsPage, setContactsPage] = useState(1);
+  // Contact count
   const [contactsTotal, setContactsTotal] = useState(0);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const PAGE_SIZE = 100;
 
   // API States
   const [isLoading, setIsLoading] = useState(true);
@@ -211,7 +208,7 @@ function CRMDashboard() {
 
   // Fetch contacts on mount + real-time subscriptions
   useEffect(() => {
-    fetchContacts(1);
+    fetchContacts();
     fetch('/api/settings?key=active_webinar_date').then(r => r.json()).then(d => { if (d.value) setActiveWebinarDate(d.value); }).catch(() => {});
 
     // Real-time: watch contacts table for changes — update in-place instead of full refetch
@@ -289,65 +286,29 @@ function CRMDashboard() {
     };
   }, []);
 
-  const fetchContacts = async (page: number, append = false) => {
-    if (page === 1) setIsLoading(true);
-    else setIsLoadingMore(true);
+  const fetchContacts = async () => {
+    setIsLoading(true);
     setFetchError("");
     try {
-      const response = await fetch(`${CONTACTS_API}?page=${page}&limit=${PAGE_SIZE}`, { cache: 'no-store' });
+      const response = await fetch(`${CONTACTS_API}?all=true&skip_history=true`, { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch data from Supabase backend");
 
       const result = await response.json();
-      const data: Contact[] = result.data;
-      setContactsTotal(result.total);
-      setContactsPage(page);
-      if (append) {
-        setContacts(prev => {
-          const existingIds = new Set(prev.map(c => c.id));
-          const newOnes = data.filter(c => !existingIds.has(c.id));
-          return [...prev, ...newOnes];
-        });
-      } else {
-        setContacts(data);
-      }
+      const data: Contact[] = Array.isArray(result) ? result : result.data || [];
+      setContacts(data);
+      setContactsTotal(data.length);
+      setAllContactsLoaded(true);
     } catch (error) {
       console.error("Error fetching contacts:", error);
       setFetchError("Failed to load contacts from the database. Please check your Supabase connection.");
     } finally {
       setIsLoading(false);
-      setIsLoadingMore(false);
     }
   };
 
-  const loadMoreContacts = () => {
-    if (contacts.length < contactsTotal && !isLoadingMore) {
-      fetchContacts(contactsPage + 1, true);
-    }
-  };
-
-  // Load all contacts for instant client-side search (like Cmd+F)
+  // All contacts loaded on init for instant client-side search
   const [allContactsLoaded, setAllContactsLoaded] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  useEffect(() => {
-    if (!searchQuery || allContactsLoaded) return;
-    // When user starts searching but we don't have all contacts, fetch all
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const res = await fetch(`${CONTACTS_API}?all=true&skip_history=true`);
-        const result = await res.json();
-        setContacts(Array.isArray(result) ? result : result.data || []);
-        setContactsTotal(Array.isArray(result) ? result.length : result.total || 0);
-        setAllContactsLoaded(true);
-      } catch (e) {
-        console.error('Load all error:', e);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 100);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
+  const isSearching = false;
 
   const handleDedup = async () => {
     setIsDeduping(true);
@@ -356,7 +317,7 @@ function CRMDashboard() {
       const data = await res.json();
       if (data.success) {
         alert(data.message);
-        fetchContacts(1);
+        fetchContacts();
       } else {
         alert(`Dedup failed: ${data.error}`);
       }
@@ -541,7 +502,7 @@ function CRMDashboard() {
         const data = await res.json();
         if (data.success) {
           alert(`Import successful: ${data.results.updated} updated, ${data.results.created} created.`);
-          fetchContacts(1);
+          fetchContacts();
         } else {
           alert(`Import failed: ${data.error}`);
         }
@@ -812,17 +773,7 @@ function CRMDashboard() {
                 </button>
               )}))
             }
-            {/* Load More button */}
-            {activeTab === 'contacts' && !isLoading && contacts.length < contactsTotal && (
-              <button
-                onClick={loadMoreContacts}
-                disabled={isLoadingMore}
-                className="w-full py-3 mt-2 rounded-xl text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {isLoadingMore ? 'Loading...' : `Load More (${contacts.length} of ${contactsTotal})`}
-              </button>
-            )}
+            {/* All contacts loaded on init */}
           </div>
 
           {/* ── FILTER DRAWER (scoped inside PANE 1) ─────────────────── */}
@@ -1023,19 +974,7 @@ function CRMDashboard() {
                   })()}
                 </tbody>
               </table>
-              {/* Load More in sheet view */}
-              {contacts.length < contactsTotal && (
-                <div className="flex justify-center py-4">
-                  <button
-                    onClick={loadMoreContacts}
-                    disabled={isLoadingMore}
-                    className="px-6 py-2 rounded-lg text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    {isLoadingMore ? 'Loading...' : `Load More (${contacts.length} of ${contactsTotal})`}
-                  </button>
-                </div>
-              )}
+              {/* All contacts loaded on init */}
             </div>
           </div>
         ) : activeTab === 'link' ? (
