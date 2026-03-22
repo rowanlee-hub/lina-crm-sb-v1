@@ -185,6 +185,9 @@ function CRMDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
 
+  // All tags from tag_definitions (real-time updated)
+  const [allTags, setAllTags] = useState<Array<{name: string; colour: string}>>([]);
+
   // Filtering state
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTags, setFilterTags] = useState<string[]>([]);
@@ -263,9 +266,26 @@ function CRMDashboard() {
       })
       .subscribe();
 
+    // Real-time: watch tag_definitions for new/deleted tags
+    const tagChannel = supabase
+      .channel('tags_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tag_definitions' }, () => {
+        // Refetch all tags on any change
+        fetch('/api/tags').then(r => r.json()).then(data => {
+          if (Array.isArray(data)) setAllTags(data);
+        }).catch(() => {});
+      })
+      .subscribe();
+
+    // Initial tag fetch
+    fetch('/api/tags').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setAllTags(data);
+    }).catch(() => {});
+
     return () => {
       supabase.removeChannel(contactChannel);
       supabase.removeChannel(historyChannel);
+      supabase.removeChannel(tagChannel);
     };
   }, []);
 
@@ -376,7 +396,7 @@ function CRMDashboard() {
     }
   };
 
-  const uniqueTags = ["All", ...getAllUniqueTags(contacts)];
+  const uniqueTags = ["All", ...allTags.map(t => t.name)];
 
   const activeFilterCount = [
     filterStatus.length > 0,
@@ -900,7 +920,7 @@ function CRMDashboard() {
                   <p className="text-[10px] text-slate-400 mb-2">Contacts with <span className="font-bold text-blue-600">any</span> selected tag</p>
                 )}
                 <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
-                  {getAllUniqueTags(contacts).map(tag => (
+                  {allTags.map(t => t.name).map(tag => (
                     <button key={tag}
                       onClick={() => setFilterTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
                       className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${filterTags.includes(tag) ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'}`}
@@ -1052,6 +1072,7 @@ function CRMDashboard() {
                  onBack={() => setView('list')}
                  isNew={isNew}
                  allContacts={contacts}
+                 allTagDefs={allTags}
                  onSwitchContact={handleContactClick}
                  onGoToInbox={goToInbox}
                  onSaveSuccess={(updatedContact: Contact) => {
@@ -1089,10 +1110,11 @@ interface ContactDetailViewProps {
   onSaveSuccess: (updatedContact: Contact) => void;
   isNew: boolean;
   allContacts: Contact[];
+  allTagDefs?: Array<{name: string; colour: string}>;
   onSwitchContact: (id: string) => void;
 }
 
-function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allContacts, onSwitchContact, onGoToInbox }: ContactDetailViewProps) {
+function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allContacts, allTagDefs, onSwitchContact, onGoToInbox }: ContactDetailViewProps) {
   const makeSafe = (d: Contact): Contact => ({
     ...d,
     tags: d.tags || [],
@@ -1103,7 +1125,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
   const originalDataRef = useRef<Contact>(makeSafe(contactData));
   const [contact, setContact] = useState<Contact>(makeSafe(contactData));
   const [newTag, setNewTag] = useState("");
-  const [tagSuggestions, setTagSuggestions] = useState<Array<{name: string; colour: string}>>([]);
+  const tagSuggestions = allTagDefs || [];
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(isNew);
@@ -1132,12 +1154,6 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
   const [wfRemoving, setWfRemoving] = useState<string | null>(null);
   const [wbRemoving, setWbRemoving] = useState(false);
 
-  // Load tag definitions for autocomplete
-  useEffect(() => {
-    fetch('/api/tags').then(r => r.json()).then(data => {
-      if (Array.isArray(data)) setTagSuggestions(data);
-    }).catch(() => {});
-  }, []);
 
   // Load webinar date options (upcoming + previous Wednesday)
   useEffect(() => {
@@ -1202,9 +1218,8 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
     const tag = (tagValue || newTag).trim();
     if (tag && !contact.tags.includes(tag)) {
       setContact({...contact, tags: [...contact.tags, tag]});
-      // Auto upsert in definitions
+      // Auto upsert in definitions (real-time subscription will auto-update allTags)
       fetch('/api/tags', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name: tag }) }).catch(() => {});
-      setTagSuggestions(prev => prev.some(s => s.name === tag) ? prev : [...prev, { name: tag, colour: '#3B82F6' }]);
     }
     setNewTag("");
     setShowTagSuggestions(false);
