@@ -48,7 +48,16 @@ export async function POST(req: Request) {
     if (!emailContact.webinar_date && lineContact.webinar_date) patch.webinar_date = lineContact.webinar_date;
     if (!emailContact.webinar_link && lineContact.webinar_link) patch.webinar_link = lineContact.webinar_link;
 
-    // Update email contact with merged data
+    // Move history from LINE contact to email contact FIRST
+    await supabase
+      .from('contact_history')
+      .update({ contact_id: email_contact_id })
+      .eq('contact_id', line_contact_id);
+
+    // Delete the LINE-only contact BEFORE updating (frees the unique line_id constraint)
+    await supabase.from('contacts').delete().eq('id', line_contact_id);
+
+    // Now update email contact with merged data (line_id is free)
     const { error: updateErr } = await supabase
       .from('contacts')
       .update(patch)
@@ -57,15 +66,6 @@ export async function POST(req: Request) {
     if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
-
-    // Move history from LINE contact to email contact
-    await supabase
-      .from('contact_history')
-      .update({ contact_id: email_contact_id })
-      .eq('contact_id', line_contact_id);
-
-    // Delete the LINE-only contact (now merged)
-    await supabase.from('contacts').delete().eq('id', line_contact_id);
 
     // Log the merge
     await supabase.from('contact_history').insert({
