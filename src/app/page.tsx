@@ -1068,6 +1068,19 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(isNew);
+
+  // Fetch history on mount and when contact changes
+  useEffect(() => {
+    if (isNew || !contact.id) return;
+    fetch(`/api/contacts/${contact.id}/history`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setContact(prev => ({ ...prev, history: data }));
+        }
+      })
+      .catch(() => {});
+  }, [contact.id, isNew]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const [copiedField, setCopiedField] = useState("");

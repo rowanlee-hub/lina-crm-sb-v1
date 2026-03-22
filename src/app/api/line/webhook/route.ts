@@ -187,8 +187,8 @@ export async function POST(req: Request) {
           // Auto-assign webinar date
           const webinarDate = getNextWebinarDate();
           // Add webinar-MMDD tag so they show up in webinar filters
-          const wd = new Date(webinarDate);
-          const webinarTag = `webinar-${String(wd.getMonth() + 1).padStart(2, '0')}${String(wd.getDate()).padStart(2, '0')}`;
+          // Use substring to avoid timezone issues with Date parsing
+          const webinarTag = `webinar-${webinarDate.substring(5, 7)}${webinarDate.substring(8, 10)}`;
           const followTags: string[] = contact.tags || [];
           if (!followTags.includes(webinarTag)) followTags.push(webinarTag);
           await supabase.from('contacts').update({
@@ -238,8 +238,7 @@ export async function POST(req: Request) {
           if (!activeEnrollment) {
             // No active enrollment — assign fresh webinar date and enroll
             const webinarDate = getNextWebinarDate();
-            const wd2 = new Date(webinarDate);
-            const refolWebinarTag = `webinar-${String(wd2.getMonth() + 1).padStart(2, '0')}${String(wd2.getDate()).padStart(2, '0')}`;
+            const refolWebinarTag = `webinar-${webinarDate.substring(5, 7)}${webinarDate.substring(8, 10)}`;
             const refolTags2: string[] = contact.tags || [];
             if (!refolTags2.includes(refolWebinarTag)) refolTags2.push(refolWebinarTag);
             await supabase.from('contacts').update({
