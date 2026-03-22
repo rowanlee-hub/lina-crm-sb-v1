@@ -56,20 +56,20 @@ export async function enrollInWebinarSequence(
     return;
   }
 
-  // Clear any existing pending messages (in case webinar date changed)
+  // Clear any existing unsent messages (pending + skipped) on re-enrollment
   await supabase
     .from('webinar_scheduled_messages')
     .delete()
     .eq('enrollment_id', enrollment.id)
-    .eq('status', 'pending');
+    .in('status', ['pending', 'skipped']);
 
   let scheduled = 0;
   let skipped = 0;
 
   for (const step of steps) {
     const sendAt = new Date(webinarAt);
-    sendAt.setDate(sendAt.getDate() - step.days_before);
-    sendAt.setHours(step.send_hour ?? 9, 0, 0, 0);
+    sendAt.setUTCDate(sendAt.getUTCDate() - step.days_before);
+    sendAt.setUTCHours(step.send_hour ?? 9, 0, 0, 0);
 
     const status = sendAt > now ? 'pending' : 'skipped';
 

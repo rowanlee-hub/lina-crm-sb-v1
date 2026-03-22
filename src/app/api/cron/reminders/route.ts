@@ -177,6 +177,10 @@ export async function GET() {
     }
 
     // ─── PART 5: Webinar Sequence Messages ─────────────────────
+    // Message A: contacts WITH webinar_link → standard reminder
+    // Message B: contacts WITHOUT webinar_link → reminder + email prompt
+    const EMAIL_PROMPT = '\n\n---\n請發送你的電郵給我們，讓我們發送你的專屬直播連結 🔗\nPlease send us your email so we can send you your unique webinar link.';
+
     const { data: dueWebinar } = await supabase
       .from('webinar_scheduled_messages')
       .select(`
@@ -199,7 +203,12 @@ export async function GET() {
       }
 
       const { renderMessage } = await import('@/lib/render-message');
-      const message = await renderMessage(step.message, contact);
+      let message = await renderMessage(step.message, contact);
+
+      // Message B: append email prompt if contact has no webinar_link
+      if (!contact.webinar_link) {
+        message += EMAIL_PROMPT;
+      }
 
       const ok = await sendLineMessage(lineToken, contact.line_id, message);
       if (ok) {

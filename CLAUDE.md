@@ -1,5 +1,7 @@
 # Lina CRM — Claude Guide
 
+> **Always check [GOALS.md](GOALS.md) at the start of each session** — it contains the living roadmap and priorities.
+
 ## Project Overview
 Lina is a LINE-based CRM and marketing automation tool built with Next.js + Supabase. It manages contacts from GoHighLevel (GHL), sends LINE messages, and runs webinar sequences.
 
