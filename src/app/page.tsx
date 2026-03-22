@@ -2647,7 +2647,7 @@ interface Automation { id: string; name: string; trigger_type: string; trigger_v
 
 function AutomationsView({ initialSub }: { initialSub?: string }) {
   const router = useRouter();
-  const [tab, setTab] = useState<'workflows' | 'broadcast' | 'templates' | 'tags' | 'webinar'>(
+  const [tab, setTab] = useState<'workflows' | 'templates' | 'tags' | 'webinar'>(
     (initialSub === 'rules' ? 'workflows' : initialSub as any) || 'workflows'
   );
 
@@ -3018,10 +3018,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
         {/* Tabs */}
         <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 w-fit">
           <button onClick={() => navigate('workflows')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'workflows' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-            Automations ({workflows.length + automations.length})
-          </button>
-          <button onClick={() => navigate('broadcast')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'broadcast' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-            Broadcast
+            Workflows ({workflows.length})
           </button>
           <button onClick={() => navigate('templates')} className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'templates' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
             Templates ({availableTemplates.length})
@@ -3037,25 +3034,10 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
         {/* ─── WORKFLOWS TAB ─────────────────────────────── */}
         {tab === 'workflows' && (
           <div className="space-y-4">
-            <div className="flex justify-end relative">
-              <button onClick={() => setShowCreateMenu(!showCreateMenu)} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center space-x-2">
-                <Plus className="w-5 h-5" /><span>Create Automation</span>
+            <div className="flex justify-end">
+              <button onClick={() => setShowWfForm(true)} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center space-x-2">
+                <Plus className="w-5 h-5" /><span>Create Workflow</span>
               </button>
-              {showCreateMenu && (
-                <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowCreateMenu(false)} />
-                <div className="absolute right-0 top-12 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-64 overflow-hidden">
-                  <button onClick={() => { setShowCreateMenu(false); setShowRuleForm(true); setEditingRuleId(null); setRuleName(''); setRuleTriggerType('TAG_ADDED'); setRuleTriggerVal(''); setRuleActionType('SEND_MESSAGE'); setRuleActionVal(''); }} className="w-full px-4 py-3 flex items-center space-x-3 hover:bg-slate-50 transition-colors text-left">
-                    <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center"><Zap className="w-4 h-4 text-amber-600" /></div>
-                    <div><p className="text-sm font-bold text-slate-900">Quick Action</p><p className="text-xs text-slate-400">Instant single-step rule</p></div>
-                  </button>
-                  <button onClick={() => { setShowCreateMenu(false); setShowWfForm(true); }} className="w-full px-4 py-3 flex items-center space-x-3 hover:bg-slate-50 transition-colors text-left border-t border-slate-100">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center"><GitMerge className="w-4 h-4 text-blue-600" /></div>
-                    <div><p className="text-sm font-bold text-slate-900">Multi-step Workflow</p><p className="text-xs text-slate-400">Sequence with waits & conditions</p></div>
-                  </button>
-                </div>
-                </>
-              )}
             </div>
 
             {showWfForm && (
@@ -3085,78 +3067,9 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
             )}
 
             {/* Quick Action form (inline) */}
-            {showRuleForm && (
-              <div className="bg-white border-2 border-amber-100 rounded-2xl p-5 space-y-4 shadow-lg">
-                <h3 className="font-bold text-slate-900 flex items-center space-x-2"><Zap className="w-4 h-4 text-amber-500" /><span>{editingRuleId ? 'Edit Quick Action' : 'New Quick Action'}</span></h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <input type="text" value={ruleName} onChange={e => setRuleName(e.target.value)} placeholder="Rule name" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <select value={ruleTriggerType} onChange={e => setRuleTriggerType(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="TAG_ADDED">Tag Added</option>
-                        <option value="USER_FOLLOW">User Follow</option>
-                        <option value="TAG_REMOVED">Tag Removed</option>
-                      </select>
-                      <input type="text" value={ruleTriggerVal} onChange={e => setRuleTriggerVal(e.target.value)} placeholder="Value" className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <select value={ruleActionType} onChange={e => setRuleActionType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="SEND_MESSAGE">Send Message</option>
-                      <option value="ADD_TAG">Add Tag</option>
-                      <option value="REMOVE_TAG">Remove Tag</option>
-                      <option value="ENROLL_WEBINAR">Enroll in Webinar Sequence</option>
-                    </select>
-                    {ruleActionType !== 'ENROLL_WEBINAR' && (
-                      <textarea value={ruleActionVal} onChange={e => setRuleActionVal(e.target.value)} placeholder="Message or tag name" rows={2} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-                    )}
-                    {ruleActionType === 'ENROLL_WEBINAR' && (
-                      <p className="text-xs text-slate-400 px-1">Will enroll the contact in the webinar sequence based on their <strong>webinar_date</strong>.</p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex justify-end space-x-3">
-                  <button onClick={cancelRuleForm} className="px-5 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-xl">Cancel</button>
-                  <button onClick={editingRuleId ? updateRule : createRule} disabled={!ruleName || !ruleTriggerVal || (ruleActionType !== 'ENROLL_WEBINAR' && !ruleActionVal)} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50">{editingRuleId ? 'Update' : 'Save'}</button>
-                </div>
-              </div>
-            )}
-
-            {/* Unified automation list */}
-            {(workflows.length + automations.length) > 0 ? (
+            {/* Workflow list */}
+            {workflows.length > 0 ? (
               <div className="space-y-3">
-                {/* Quick Action cards */}
-                {automations.map(auto => (
-                  <div key={`rule-${auto.id}`} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group" onClick={() => editRule(auto)}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600"><Zap className="w-6 h-6" /></div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <h3 className="font-bold text-slate-900">{auto.name}</h3>
-                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded text-[10px] font-bold uppercase">Instant</span>
-                          </div>
-                          <div className="flex items-center space-x-2 text-xs mt-1">
-                            <span className="text-slate-400">IF</span>
-                            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 font-bold text-[10px] uppercase">{auto.trigger_type?.replace('_',' ')}</span>
-                            <span className="font-extrabold text-slate-800">{auto.trigger_value}</span>
-                            <span className="text-slate-400">→</span>
-                            <span className="px-1.5 py-0.5 bg-blue-100 rounded text-blue-600 font-bold text-[10px] uppercase">{auto.action_type === 'ENROLL_WEBINAR' ? 'Enroll Webinar' : auto.action_type?.replace('_',' ')}</span>
-                            {auto.action_value && <span className="text-slate-500 truncate max-w-[120px]">{auto.action_value}</span>}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3" onClick={e => e.stopPropagation()}>
-                        <div onClick={() => toggleRule(auto.id, auto.is_active)} className={`w-10 h-5 rounded-full p-0.5 cursor-pointer transition-colors ${auto.is_active ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                          <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${auto.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
-                        </div>
-                        <button onClick={() => deleteRule(auto.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-4 h-4" /></button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Workflow cards */}
                 {workflows.map(wf => (
                   <div key={`wf-${wf.id}`} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group" onClick={() => loadSteps(wf)}>
                     <div className="flex items-center justify-between">
@@ -3196,91 +3109,6 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
           </div>
         )}
 
-        {/* ─── BROADCAST TAB ─────────────────────────────── */}
-        {tab === 'broadcast' && (
-          <div className="space-y-6">
-            <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm space-y-6">
-              <div className="space-y-2">
-                <h3 className="text-xl font-extrabold text-slate-900 flex items-center">
-                  <Megaphone className="w-6 h-6 mr-2 text-blue-600" /> Bulk Broadcast
-                </h3>
-                <p className="text-sm text-slate-500 font-medium italic">Send a personalized message to everyone with a specific tag.</p>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">1. Select Target Tag</label>
-                    <select 
-                      value={broadcastTag} 
-                      onChange={e => setBroadcastTag(e.target.value)} 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                    >
-                      <option value="">-- Select a Tag --</option>
-                      {availableTags.map(t => (
-                        <option key={t.id} value={t.name}>{t.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">2. Pick Template</label>
-                    <div className="space-y-2">
-                      <select 
-                        value={broadcastTemplate} 
-                        onChange={e => setBroadcastTemplate(e.target.value)} 
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                      >
-                        <option value="">-- Select Template --</option>
-                        {availableTemplates.map(t => (
-                          <option key={t.id} value={t.content}>{t.name}</option>
-                        ))}
-                      </select>
-                      <textarea 
-                        value={broadcastTemplate} 
-                        onChange={e => setBroadcastTemplate(e.target.value)} 
-                        placeholder="Or type a custom message... use {{name}} for personalization."
-                        rows={5}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">3. Scheduling (Optional)</label>
-                    <input 
-                      type="datetime-local" 
-                      value={broadcastSchedule} 
-                      onChange={e => setBroadcastSchedule(e.target.value)} 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                    />
-                    <p className="text-[10px] text-slate-400 font-medium">Leave blank to send immediately.</p>
-                  </div>
-
-                  <div className="pt-6">
-                    {broadcastStatus && (
-                      <div className={`mb-4 p-4 rounded-2xl text-sm font-bold flex items-center ${broadcastStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
-                        {broadcastStatus.type === 'success' ? <CheckCircle2 className="w-5 h-5 mr-2" /> : <AlertCircle className="w-5 h-5 mr-2" />}
-                        {broadcastStatus.text}
-                      </div>
-                    )}
-
-                    <button 
-                      onClick={runBroadcast}
-                      disabled={!broadcastTag || !broadcastTemplate || isBroadcasting}
-                      className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-slate-900/20 hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center justify-center space-x-2"
-                    >
-                      {isBroadcasting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                      <span>{broadcastSchedule ? 'Schedule Broadcast' : 'Send Broadcast Now'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
         {/* ─── TEMPLATES TAB ─────────────────────────────── */}
         {tab === 'templates' && (
           <div className="space-y-6">
