@@ -9,6 +9,16 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const contactId = searchParams.get('contact_id');
+    const countOnly = searchParams.get('count_only');
+
+    // Fast count-only mode for dashboard
+    if (countOnly) {
+      const { count: active } = await supabase
+        .from('webinar_enrollments')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active');
+      return NextResponse.json({ active: active || 0 });
+    }
 
     let query = supabase
       .from('webinar_enrollments')

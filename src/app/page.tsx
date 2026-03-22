@@ -2461,11 +2461,11 @@ function DashboardBar() {
   const loadDashboard = () => {
     Promise.all([
       fetch('/api/settings?key=active_webinar_date').then(r => r.json()).catch(() => ({})),
-      fetch('/api/webinar-sequence/enrollments').then(r => r.json()).catch(() => []),
-    ]).then(([setting, enrollments]) => {
+      fetch('/api/webinar-sequence/enrollments?count_only=true').then(r => r.json()).catch(() => ({ active: 0 })),
+    ]).then(([setting, enrollData]) => {
       const activeDate = setting?.value || '';
-      const activeEnrollments = Array.isArray(enrollments) ? enrollments.filter((e: any) => e.status === 'active') : [];
-      setInfo({ activeDate, enrollCount: activeEnrollments.length, pendingCount: 0, missingCount: 0 });
+      const enrollCount = enrollData.active ?? (Array.isArray(enrollData) ? enrollData.filter((e: any) => e.status === 'active').length : 0);
+      setInfo({ activeDate, enrollCount, pendingCount: 0, missingCount: 0 });
       // Fetch pending message count
       fetch('/api/webinar-sequence/messages?status=pending').then(r => r.json()).then(msgs => {
         setInfo(prev => prev ? { ...prev, pendingCount: Array.isArray(msgs) ? msgs.length : 0 } : prev);
