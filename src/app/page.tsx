@@ -162,49 +162,6 @@ const SheetRow = React.memo(function SheetRow({ contact, idx, editingCell, setEd
   );
 });
 
-function ClaudePixelMascot() {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const size = 28;
-    let x = Math.random() * (window.innerWidth - size);
-    let y = Math.random() * (window.innerHeight - size);
-    let dx = (1.2 + Math.random() * 0.8) * (Math.random() > 0.5 ? 1 : -1);
-    let dy = (1.2 + Math.random() * 0.8) * (Math.random() > 0.5 ? 1 : -1);
-    let rotation = 0;
-    let frame: number;
-    const animate = () => {
-      x += dx; y += dy; rotation += 1.5;
-      if (x <= 0 || x >= window.innerWidth - size) { dx = -dx; x = Math.max(0, Math.min(x, window.innerWidth - size)); }
-      if (y <= 0 || y >= window.innerHeight - size) { dy = -dy; y = Math.max(0, Math.min(y, window.innerHeight - size)); }
-      el.style.transform = `translate(${x}px, ${y}px) rotate(${rotation}deg)`;
-      frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-  // Claude Code pixel sparkle logo — 7x7 grid
-  const p = [
-    '...X...',
-    '...X...',
-    '.X.X.X.',
-    'XXXXXXX',
-    '.X.X.X.',
-    '...X...',
-    '...X...',
-  ];
-  return (
-    <div ref={ref} style={{ position: 'fixed', top: 0, left: 0, pointerEvents: 'none', zIndex: 9999, width: 28, height: 28 }}>
-      <svg width="28" height="28" viewBox="0 0 7 7" shapeRendering="crispEdges">
-        {p.map((row, y) => row.split('').map((c, x) =>
-          c === 'X' ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="#E8825A" /> : null
-        ))}
-      </svg>
-    </div>
-  );
-}
-
 function CRMDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1119,8 +1076,6 @@ function CRMDashboard() {
         )}
       </section>
 
-      {/* Claude Code Pixel Mascot - bouncing randomly */}
-      <ClaudePixelMascot />
 
     </div>
   );
