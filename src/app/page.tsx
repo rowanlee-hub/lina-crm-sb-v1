@@ -757,7 +757,7 @@ function CRMDashboard() {
                         </p>
                         {lastMsg?.date && (
                           <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-2">
-                            {new Date(lastMsg.date).toLocaleDateString([], {month:'short', day:'numeric'})}
+                            {new Date(lastMsg.date).toLocaleDateString('en-MY', {timeZone:'Asia/Kuala_Lumpur', month:'short', day:'numeric'})}
                           </span>
                         )}
                       </div>
@@ -1151,7 +1151,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
           const prev = new Date(data.value);
           prev.setDate(prev.getDate() - 7);
           const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          const fmtLabel = (d: Date) => d.toLocaleDateString('en-MY', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+          const fmtLabel = (d: Date) => d.toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
           setWebinarDateOptions([
             { label: `Upcoming — ${fmtLabel(upcoming)}`, value: fmt(upcoming) },
             { label: `Previous — ${fmtLabel(prev)}`, value: fmt(prev) },
@@ -1727,7 +1727,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                         {/* Show current date as option if it doesn't match upcoming/previous */}
                         {contact.webinar.dateTime && !webinarDateOptions.some(opt => opt.value === contact.webinar.dateTime.substring(0, 10)) && (() => {
                           const d = new Date(contact.webinar.dateTime);
-                          const label = `Current — ${d.toLocaleDateString('en-MY', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}`;
+                          const label = `Current — ${d.toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}`;
                           return <option value={contact.webinar.dateTime.substring(0, 10)}>{label}</option>;
                         })()}
                       </select>
@@ -1754,35 +1754,21 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                 {/* --- Webinar Sequence Status --- */}
                 {!isNew && (
                   <div className="border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
-                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="w-4 h-4 text-blue-500" />
-                        <h3 className="text-sm font-semibold text-slate-700 tracking-wide">Webinar Sequence</h3>
-                      </div>
+                    <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        {wbMessages.length > 0 && (() => {
-                          const pending = wbMessages.filter((m: any) => m.status === 'pending').length;
-                          const sent = wbMessages.filter((m: any) => m.status === 'sent').length;
-                          const total = wbMessages.length;
-                          return (
-                            <span className="text-[10px] font-medium text-slate-500">
-                              {sent}/{total} sent · {pending} pending
-                            </span>
-                          );
-                        })()}
-                        {wbEnrollment && (() => {
-                          const wDate = new Date(wbEnrollment.webinar_date);
-                          const isPast = wDate < new Date();
-                          return (
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isPast ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                              {isPast ? 'Past webinar' : 'Upcoming webinar'} · {wDate.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </span>
-                          );
-                        })()}
+                        <Calendar className="w-4 h-4 text-blue-500" />
+                        <h3 className="text-sm font-semibold text-slate-700">Webinar Sequence</h3>
+                        {wbMessages.length > 0 && (
+                          <span className="text-[10px] text-slate-400">
+                            {wbMessages.filter((m: any) => m.status === 'sent').length}/{wbMessages.length} sent
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
                         {wbEnrollment && wbEnrollment.status === 'active' && (
                           <button
                             onClick={async () => {
-                              if (!confirm('Remove this contact from the webinar sequence? All pending messages will be cancelled.')) return;
+                              if (!confirm('Remove from webinar sequence?')) return;
                               setWbRemoving(true);
                               try {
                                 const res = await fetch(`/api/webinar-sequence/enrollments?id=${wbEnrollment.id}`, { method: 'DELETE' });
@@ -1790,82 +1776,84 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                                 if (data.success) {
                                   setWbEnrollment({ ...wbEnrollment, status: 'cancelled' });
                                   setWbMessages(prev => prev.map((m: any) => m.status === 'pending' ? { ...m, status: 'cancelled' } : m));
-                                } else { alert(data.error || 'Failed to remove'); }
-                              } catch { alert('Failed to remove'); }
+                                } else { alert(data.error || 'Failed'); }
+                              } catch { alert('Failed'); }
                               finally { setWbRemoving(false); }
                             }}
                             disabled={wbRemoving}
-                            className="text-[10px] font-bold text-red-500 hover:text-red-700 disabled:opacity-50 px-1.5 py-0.5 rounded hover:bg-red-50"
+                            className="text-[10px] font-bold text-red-500 hover:text-red-700 disabled:opacity-50"
                           >
                             {wbRemoving ? '...' : 'Remove'}
                           </button>
                         )}
+                        {(!wbEnrollment || wbEnrollment.status !== 'active') && contact.webinar?.dateTime && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Enroll in webinar sequence?`)) return;
+                              setWbRemoving(true);
+                              try {
+                                const res = await fetch('/api/webinar-sequence/enroll', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ contact_id: contact.id }),
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                  const [enrRes, msgRes] = await Promise.all([
+                                    fetch(`/api/webinar-sequence/enrollments?contact_id=${contact.id}`).then(r => r.json()),
+                                    fetch(`/api/webinar-sequence/messages?contact_id=${contact.id}`).then(r => r.json()),
+                                  ]);
+                                  const enrollment = Array.isArray(enrRes) ? enrRes.find((e: any) => e.contact_id === contact.id && e.status === 'active') : null;
+                                  setWbEnrollment(enrollment ?? null);
+                                  setWbMessages(Array.isArray(msgRes) ? msgRes : []);
+                                } else { alert(data.error || 'Failed'); }
+                              } catch { alert('Failed'); }
+                              finally { setWbRemoving(false); }
+                            }}
+                            disabled={wbRemoving}
+                            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-50 flex items-center gap-0.5"
+                          >
+                            {wbRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                            Enroll
+                          </button>
+                        )}
                       </div>
                     </div>
-                    {(!wbEnrollment || wbEnrollment.status !== 'active') && contact.webinar?.dateTime && (
-                      <div className="px-4 py-3 border-b border-slate-100">
-                        <button
-                          onClick={async () => {
-                            if (!confirm(`Enroll in webinar sequence for ${new Date(contact.webinar.dateTime).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}?`)) return;
-                            setWbRemoving(true);
-                            try {
-                              const res = await fetch('/api/webinar-sequence/enroll', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ contact_id: contact.id }),
-                              });
-                              const data = await res.json();
-                              if (data.success) {
-                                const [enrRes, msgRes] = await Promise.all([
-                                  fetch(`/api/webinar-sequence/enrollments?contact_id=${contact.id}`).then(r => r.json()),
-                                  fetch(`/api/webinar-sequence/messages?contact_id=${contact.id}`).then(r => r.json()),
-                                ]);
-                                const enrollment = Array.isArray(enrRes) ? enrRes.find((e: any) => e.contact_id === contact.id && e.status === 'active') : null;
-                                setWbEnrollment(enrollment ?? null);
-                                setWbMessages(Array.isArray(msgRes) ? msgRes : []);
-                              } else { alert(data.error || 'Failed to enroll'); }
-                            } catch { alert('Failed to enroll'); }
-                            finally { setWbRemoving(false); }
-                          }}
-                          disabled={wbRemoving}
-                          className="w-full px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {wbRemoving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                          Enroll in Webinar Sequence
-                        </button>
-                      </div>
-                    )}
-                    <div className="divide-y divide-slate-50">
+                    <div className="max-h-48 overflow-y-auto">
                       {(() => {
                         const pending = wbMessages.filter((m: any) => m.status === 'pending');
                         const sent = wbMessages.filter((m: any) => m.status === 'sent');
                         const other = wbMessages.filter((m: any) => !['pending', 'sent'].includes(m.status));
                         const active = [...pending, ...sent];
-                        if (active.length === 0 && other.length === 0 && (!wbEnrollment || wbEnrollment.status === 'active')) {
-                          return <p className="px-4 py-3 text-xs text-slate-400">No sequence messages scheduled.</p>;
+                        if (active.length === 0 && other.length === 0) {
+                          return <p className="px-4 py-3 text-xs text-slate-400">No messages scheduled.</p>;
                         }
+                        const fmtTime = (iso: string) => {
+                          const d = new Date(iso);
+                          return d.toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
+                        };
+                        const preview = (text: string) => {
+                          if (!text) return '—';
+                          const clean = text.replace(/\n/g, ' ').trim();
+                          return clean.length > 50 ? clean.substring(0, 50) + '…' : clean;
+                        };
                         return (
                           <>
-                            {active.map((msg: any) => {
-                              const statusColor = msg.status === 'sent' ? 'text-emerald-600 bg-emerald-50' : 'text-blue-600 bg-blue-50';
-                              return (
-                                <div key={msg.id} className="px-4 py-2.5 flex items-start justify-between gap-3">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs text-slate-600 line-clamp-2">{msg.message_preview || msg.step_message || '—'}</p>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">{new Date(msg.scheduled_at).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
-                                  </div>
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${statusColor}`}>{msg.status}</span>
-                                </div>
-                              );
-                            })}
+                            {active.map((msg: any) => (
+                              <div key={msg.id} className="px-3 py-1.5 flex items-center gap-2 border-b border-slate-50 last:border-0">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${msg.status === 'sent' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                                <span className="text-[10px] text-slate-500 shrink-0 w-[130px]">{fmtTime(msg.scheduled_at)}</span>
+                                <span className="text-[11px] text-slate-600 truncate">{preview(msg.message_preview || msg.step_message)}</span>
+                              </div>
+                            ))}
                             {other.length > 0 && (
-                              <div className="px-4 py-2 bg-slate-50">
-                                <p className="text-[10px] text-slate-400">
+                              <div className="px-3 py-1.5 bg-slate-50">
+                                <span className="text-[10px] text-slate-400">
                                   {other.filter((m: any) => m.status === 'skipped').length > 0 && `${other.filter((m: any) => m.status === 'skipped').length} skipped`}
-                                  {other.filter((m: any) => m.status === 'skipped').length > 0 && other.filter((m: any) => m.status === 'cancelled').length > 0 && ' · '}
+                                  {other.filter((m: any) => m.status === 'skipped').length > 0 && other.filter((m: any) => m.status !== 'skipped').length > 0 && ' · '}
                                   {other.filter((m: any) => m.status === 'cancelled').length > 0 && `${other.filter((m: any) => m.status === 'cancelled').length} cancelled`}
                                   {other.filter((m: any) => m.status === 'failed').length > 0 && ` · ${other.filter((m: any) => m.status === 'failed').length} failed`}
-                                </p>
+                                </span>
                               </div>
                             )}
                           </>
@@ -1978,7 +1966,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                             <div className="flex items-center gap-2 min-w-0">
                               <Calendar className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                               <span className="text-xs font-semibold text-slate-700">
-                                Webinar {new Date(wbEnrollment.webinar_date).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                Webinar {new Date(wbEnrollment.webinar_date).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', year: 'numeric' })}
                               </span>
                               <span className="text-[9px] font-bold text-blue-600 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded-full shrink-0">Active</span>
                             </div>
@@ -2008,7 +1996,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                             {contact.webinar?.dateTime && (
                               <button
                                 onClick={async () => {
-                                  if (!confirm(`Enroll this contact in webinar sequence for ${new Date(contact.webinar.dateTime).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}?`)) return;
+                                  if (!confirm(`Enroll this contact in webinar sequence for ${new Date(contact.webinar.dateTime).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', year: 'numeric' })}?`)) return;
                                   setWbRemoving(true);
                                   try {
                                     const res = await fetch('/api/webinar-sequence/enroll', {
@@ -2095,7 +2083,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                                 <div className="flex items-center space-x-2 mb-0.5">
                                   <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${labelColor}`}>{label}</span>
                                   <span className="text-[10px] text-slate-400 font-medium">
-                                    {histItem.date ? new Date(histItem.date).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                                    {histItem.date ? new Date(histItem.date).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                                   </span>
                                 </div>
                                 <p className="text-xs text-slate-700 font-medium break-words">{histItem.action}</p>
@@ -2164,7 +2152,7 @@ function MessageList({ history }: { history: HistoryItem[] }) {
     const isAuto = rawAction.includes('[Scheduled]') || rawAction.includes('[Auto]');
     const isManual = rawAction.startsWith('Chat: ') && !isAuto;
     const time = histItem.date ? new Date(histItem.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-    const dateLabel = histItem.date ? new Date(histItem.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+    const dateLabel = histItem.date ? new Date(histItem.date).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', weekday: 'short', month: 'short', day: 'numeric' }) : '';
 
     if (dateLabel && dateLabel !== lastDateLabel) {
       lastDateLabel = dateLabel;
@@ -3841,7 +3829,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-slate-800 truncate">{contact?.name || contact?.email || 'Unknown'}</p>
                             <p className="text-xs text-slate-400">
-                              Webinar: {new Date(enroll.webinar_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              Webinar: {new Date(enroll.webinar_date).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', month: 'short', day: 'numeric', year: 'numeric' })}
                             </p>
                             <div className="flex space-x-2 mt-1">
                               <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">{sent} sent</span>
