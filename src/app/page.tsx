@@ -2712,6 +2712,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   const [wbSendHour, setWbSendHour] = useState(9);
   const [wbMessage, setWbMessage] = useState('');
   const [wbMessageNoLink, setWbMessageNoLink] = useState('');
+  const [wbBlocksNoLink, setWbBlocksNoLink] = useState<Array<{ type: 'text' | 'image' | 'video'; content: string }>>([{ type: 'text', content: '' }]);
   const [wbBlocks, setWbBlocks] = useState<Array<{ type: 'text' | 'image' | 'video'; content: string }>>([{ type: 'text', content: '' }]);
 
   // Convert blocks array → single message string for storage
@@ -3339,7 +3340,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                   <h3 className="font-bold text-slate-800">Reminder Steps</h3>
                   <p className="text-xs text-slate-400 mt-0.5">Messages sent based on days before the webinar. Supports: {'{{name}}'}, {'{{webinar_date}}'}, {'{{webinar_link}}'}</p>
                 </div>
-                <button onClick={() => { setWbStepForm(true); setWbEditingStep(null); setWbDaysBefore(6); setWbSendHour(9); setWbMessage(''); setWbMessageNoLink(''); setWbBlocks([{ type: 'text', content: '' }]); }}
+                <button onClick={() => { setWbStepForm(true); setWbEditingStep(null); setWbDaysBefore(6); setWbSendHour(9); setWbMessage(''); setWbMessageNoLink(''); setWbBlocks([{ type: 'text', content: '' }]); setWbBlocksNoLink([{ type: 'text', content: '' }]); }}
                   className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">
                   <Plus className="w-4 h-4" /><span>Add Step</span>
                 </button>
@@ -3464,13 +3465,62 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                         <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">No Link</span>
                       </label>
                       <p className="text-[10px] text-slate-400 mb-2">If empty, contacts without a link will receive the same message as above.</p>
-                      <textarea
-                        value={wbMessageNoLink}
-                        onChange={e => setWbMessageNoLink(e.target.value)}
-                        rows={4}
-                        className="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-amber-400 outline-none bg-amber-50/30"
-                        placeholder="e.g. Same reminder but asking for their email..."
-                      />
+                      <div className="space-y-2">
+                        {wbBlocksNoLink.map((block, idx) => (
+                          <div key={idx} className="bg-amber-50/30 border border-amber-200 rounded-lg p-3 space-y-2 relative">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-[10px] font-bold text-amber-400 uppercase">#{idx + 1}</span>
+                                <select value={block.type} onChange={e => {
+                                  const updated = [...wbBlocksNoLink];
+                                  updated[idx] = { type: e.target.value as 'text' | 'image' | 'video', content: '' };
+                                  setWbBlocksNoLink(updated);
+                                  setWbMessageNoLink(blocksToMessage(updated));
+                                }} className="text-[10px] font-bold border border-amber-200 rounded px-1.5 py-0.5 bg-white">
+                                  <option value="text">Text</option>
+                                  <option value="image">Image</option>
+                                  <option value="video">Video</option>
+                                </select>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                {idx > 0 && <button onClick={() => { const updated = [...wbBlocksNoLink]; [updated[idx-1], updated[idx]] = [updated[idx], updated[idx-1]]; setWbBlocksNoLink(updated); setWbMessageNoLink(blocksToMessage(updated)); }} className="text-amber-400 hover:text-amber-600 p-0.5"><ChevronUp className="w-3 h-3" /></button>}
+                                {idx < wbBlocksNoLink.length - 1 && <button onClick={() => { const updated = [...wbBlocksNoLink]; [updated[idx], updated[idx+1]] = [updated[idx+1], updated[idx]]; setWbBlocksNoLink(updated); setWbMessageNoLink(blocksToMessage(updated)); }} className="text-amber-400 hover:text-amber-600 p-0.5"><ChevronDown className="w-3 h-3" /></button>}
+                                {wbBlocksNoLink.length > 1 && (
+                                  <button onClick={() => { const updated = wbBlocksNoLink.filter((_, i) => i !== idx); setWbBlocksNoLink(updated); setWbMessageNoLink(blocksToMessage(updated)); }} className="text-amber-300 hover:text-red-500 p-0.5"><X className="w-3 h-3" /></button>
+                                )}
+                              </div>
+                            </div>
+                            {block.type === 'text' ? (
+                              <textarea value={block.content} onChange={e => {
+                                const updated = [...wbBlocksNoLink]; updated[idx] = { ...block, content: e.target.value };
+                                setWbBlocksNoLink(updated); setWbMessageNoLink(blocksToMessage(updated));
+                              }} rows={3} className="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-amber-400 outline-none bg-white" placeholder="Message text..." />
+                            ) : block.type === 'image' ? (
+                              <input type="text" value={block.content} onChange={e => {
+                                const updated = [...wbBlocksNoLink]; updated[idx] = { ...block, content: e.target.value };
+                                setWbBlocksNoLink(updated); setWbMessageNoLink(blocksToMessage(updated));
+                              }} className="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm bg-white" placeholder="Image URL (https://...)" />
+                            ) : (
+                              <div className="space-y-1">
+                                <input type="text" value={block.content.split('|')[0] || ''} onChange={e => {
+                                  const updated = [...wbBlocksNoLink]; updated[idx] = { ...block, content: e.target.value + '|' + (block.content.split('|')[1] || '') };
+                                  setWbBlocksNoLink(updated); setWbMessageNoLink(blocksToMessage(updated));
+                                }} className="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm bg-white" placeholder="Video URL" />
+                                <input type="text" value={block.content.split('|')[1] || ''} onChange={e => {
+                                  const updated = [...wbBlocksNoLink]; updated[idx] = { ...block, content: (block.content.split('|')[0] || '') + '|' + e.target.value };
+                                  setWbBlocksNoLink(updated); setWbMessageNoLink(blocksToMessage(updated));
+                                }} className="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm bg-white" placeholder="Preview image URL" />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {wbBlocksNoLink.length < 5 && (
+                        <button onClick={() => { const updated = [...wbBlocksNoLink, { type: 'text' as const, content: '' }]; setWbBlocksNoLink(updated); setWbMessageNoLink(blocksToMessage(updated)); }}
+                          className="mt-2 flex items-center space-x-1 text-xs text-amber-600 font-semibold hover:text-amber-700">
+                          <Plus className="w-3.5 h-3.5" /><span>Add Block</span>
+                        </button>
+                      )}
                     </div>
 
                     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -3595,7 +3645,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                         >
                           {wbTestingStepId === step.id ? '…' : 'Test'}
                         </button>
-                        <button onClick={() => { setWbEditingStep(step); setWbDaysBefore(step.days_before); setWbSendHour(step.send_hour); setWbMessage(step.message); setWbMessageNoLink(step.message_no_link || ''); setWbBlocks(messageToBlocks(step.message)); setWbStepForm(true); }}
+                        <button onClick={() => { setWbEditingStep(step); setWbDaysBefore(step.days_before); setWbSendHour(step.send_hour); setWbMessage(step.message); setWbMessageNoLink(step.message_no_link || ''); setWbBlocks(messageToBlocks(step.message)); setWbBlocksNoLink(step.message_no_link ? messageToBlocks(step.message_no_link) : [{ type: 'text', content: '' }]); setWbStepForm(true); }}
                           className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit step">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
