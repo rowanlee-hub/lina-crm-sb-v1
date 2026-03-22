@@ -24,6 +24,8 @@ function WelcomeContent() {
       padding: '20px',
       minHeight: '100vh',
       boxSizing: 'border-box',
+      backgroundColor: '#ffffff',
+      color: '#111827',
     }}>
       <style>{`
         @keyframes ghl-bounce-btn {
