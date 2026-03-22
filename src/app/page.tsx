@@ -3866,6 +3866,7 @@ type ImportRow = { line_id: string; email: string; display_name: string; webinar
 type RowResult = ImportRow & { status: 'created' | 'linked' | 'updated' | 'skipped' | 'already_had' };
 
 function LineMatchView() {
+  const [linkTab, setLinkTab] = useState<'csv' | 'merge'>('csv');
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [preview, setPreview] = useState<ImportRow[]>([]);
   const [dupCount, setDupCount] = useState(0);
@@ -4018,17 +4019,162 @@ function LineMatchView() {
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  // Merge tool state
+  const [lineOnly, setLineOnly] = useState<any[]>([]);
+  const [emailOnly, setEmailOnly] = useState<any[]>([]);
+  const [mergeLoading, setMergeLoading] = useState(false);
+  const [selectedLine, setSelectedLine] = useState<any>(null);
+  const [emailSearch, setEmailSearch] = useState('');
+  const [merging, setMerging] = useState<string | null>(null);
+
+  const fetchUnmatched = async () => {
+    setMergeLoading(true);
+    try {
+      const res = await fetch('/api/contacts/unmatched');
+      const data = await res.json();
+      setLineOnly(data.line_only || []);
+      setEmailOnly(data.email_only || []);
+    } catch { /* silent */ }
+    setMergeLoading(false);
+  };
+
+  const handleMerge = async (lineContactId: string, emailContactId: string) => {
+    if (!confirm('Merge these two contacts? The LINE contact will be merged into the email contact.')) return;
+    setMerging(lineContactId);
+    try {
+      const res = await fetch('/api/contacts/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ line_contact_id: lineContactId, email_contact_id: emailContactId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLineOnly(prev => prev.filter(c => c.id !== lineContactId));
+        setEmailOnly(prev => prev.filter(c => c.id !== emailContactId));
+        setSelectedLine(null);
+        setEmailSearch('');
+      } else {
+        alert(`Merge failed: ${data.error}`);
+      }
+    } catch { alert('Merge error'); }
+    setMerging(null);
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">LINE Contact Import</h2>
+          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Link & Merge Contacts</h2>
           <p className="text-slate-500 mt-1 text-sm leading-relaxed">
-            Upload a CSV exported from LINE or your webinar platform. Contacts are matched by <strong>line_id (user_id)</strong> first, then by <strong>email</strong> if provided.
-            New contacts are created for unmatched rows. Existing data is never overwritten — only blank fields are filled in.
+            Import LINE user IDs via CSV, or manually merge LINE contacts with email contacts.
           </p>
         </div>
+
+        {/* Sub-tabs */}
+        <div className="flex space-x-1 bg-slate-100 rounded-lg p-1">
+          <button onClick={() => setLinkTab('csv')}
+            className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-all ${linkTab === 'csv' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            CSV Import
+          </button>
+          <button onClick={() => { setLinkTab('merge'); if (lineOnly.length === 0 && emailOnly.length === 0) fetchUnmatched(); }}
+            className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-all ${linkTab === 'merge' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            Manual Merge
+          </button>
+        </div>
+
+        {linkTab === 'merge' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">
+                <span className="font-bold text-blue-600">{lineOnly.length}</span> LINE-only · <span className="font-bold text-amber-600">{emailOnly.length}</span> Email-only
+              </p>
+              <button onClick={fetchUnmatched} disabled={mergeLoading}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50">
+                {mergeLoading ? 'Loading…' : 'Refresh'}
+              </button>
+            </div>
+
+            {lineOnly.length === 0 && !mergeLoading ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
+                <p className="text-sm text-slate-400">No unmatched LINE contacts found. All contacts are linked!</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {lineOnly.map(lc => (
+                  <div key={lc.id} className={`bg-white border rounded-xl overflow-hidden transition-all ${selectedLine?.id === lc.id ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+                    <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50"
+                      onClick={() => { setSelectedLine(selectedLine?.id === lc.id ? null : lc); setEmailSearch(''); }}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
+                          {(lc.name || '?')[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">{lc.name || 'No Name'}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">{lc.line_id}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {lc.tags?.includes('pending-match') && (
+                          <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">pending-match</span>
+                        )}
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${selectedLine?.id === lc.id ? 'rotate-180' : ''}`} />
+                      </div>
+                    </div>
+
+                    {selectedLine?.id === lc.id && (
+                      <div className="border-t border-blue-200 p-3 bg-blue-50/30 space-y-3">
+                        <div>
+                          <label className="text-xs text-slate-500 font-medium">Search email contact to merge with:</label>
+                          <input
+                            type="text"
+                            value={emailSearch}
+                            onChange={e => setEmailSearch(e.target.value)}
+                            placeholder="Type name or email to filter..."
+                            className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+                          />
+                        </div>
+                        <div className="max-h-[200px] overflow-y-auto space-y-1">
+                          {emailOnly
+                            .filter(ec => {
+                              if (!emailSearch.trim()) return true;
+                              const q = emailSearch.toLowerCase();
+                              return (ec.name || '').toLowerCase().includes(q) || (ec.email || '').toLowerCase().includes(q);
+                            })
+                            .map(ec => (
+                              <div key={ec.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20">
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-700">{ec.name || 'No Name'}</p>
+                                  <p className="text-xs text-slate-400">{ec.email} {ec.phone ? `· ${ec.phone}` : ''}</p>
+                                </div>
+                                <button
+                                  onClick={() => handleMerge(lc.id, ec.id)}
+                                  disabled={merging === lc.id}
+                                  className="px-3 py-1 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                  {merging === lc.id ? '…' : 'Merge'}
+                                </button>
+                              </div>
+                            ))
+                          }
+                          {emailOnly.filter(ec => {
+                            if (!emailSearch.trim()) return true;
+                            const q = emailSearch.toLowerCase();
+                            return (ec.name || '').toLowerCase().includes(q) || (ec.email || '').toLowerCase().includes(q);
+                          }).length === 0 && (
+                            <p className="text-xs text-slate-400 text-center py-2">No matching email contacts found.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {linkTab === 'csv' && (<>
 
         {/* Column guide */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
@@ -4180,6 +4326,8 @@ function LineMatchView() {
             </div>
           </div>
         )}
+
+        </>)}
       </div>
     </div>
   );
