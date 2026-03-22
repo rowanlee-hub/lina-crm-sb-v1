@@ -2734,7 +2734,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
 
     const flushText = () => {
       const text = textBuffer.join('\n');
-      if (text.trim() || blocks.length === 0) blocks.push({ type: 'text', content: text });
+      if (text.trim()) blocks.push({ type: 'text', content: text });
       textBuffer = [];
     };
 
