@@ -71,7 +71,8 @@ export async function enrollInWebinarSequence(
     sendAt.setUTCDate(sendAt.getUTCDate() - step.days_before);
     const hour = Math.floor(step.send_hour ?? 9);
     const minute = Math.round(((step.send_hour ?? 9) % 1) * 100);
-    sendAt.setUTCHours(hour, minute, 0, 0);
+    // send_hour is in Malaysia time (UTC+8), convert to UTC
+    sendAt.setUTCHours(hour - 8, minute, 0, 0);
 
     const status = sendAt > now ? 'pending' : 'skipped';
 
