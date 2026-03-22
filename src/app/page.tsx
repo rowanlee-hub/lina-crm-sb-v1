@@ -2434,6 +2434,60 @@ interface Step {
 }
 interface Automation { id: string; name: string; trigger_type: string; trigger_value: string; action_type: string; action_value: string; is_active: boolean; }
 
+function DashboardBar() {
+  const [info, setInfo] = useState<{ activeDate: string; enrollCount: number; pendingCount: number } | null>(null);
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/settings?key=active_webinar_date').then(r => r.json()).catch(() => ({})),
+      fetch('/api/webinar-sequence/enrollments').then(r => r.json()).catch(() => []),
+    ]).then(([setting, enrollments]) => {
+      const activeDate = setting?.value || '';
+      const activeEnrollments = Array.isArray(enrollments) ? enrollments.filter((e: any) => e.status === 'active') : [];
+      // Count pending messages across all enrollments
+      setInfo({ activeDate, enrollCount: activeEnrollments.length, pendingCount: 0 });
+      // Fetch pending message count
+      fetch('/api/webinar-sequence/messages?status=pending').then(r => r.json()).then(msgs => {
+        setInfo(prev => prev ? { ...prev, pendingCount: Array.isArray(msgs) ? msgs.length : 0 } : prev);
+      }).catch(() => {});
+    });
+  }, []);
+
+  if (!info) return null;
+
+  const fmtDate = (d: string) => {
+    if (!d) return '—';
+    const date = new Date(d);
+    return date.toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const day1 = info.activeDate;
+  const day2 = day1 ? (() => { const d = new Date(day1); d.setDate(d.getDate() + 1); return d.toISOString().substring(0, 10); })() : '';
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <div className="flex items-center gap-6 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-blue-500" />
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Next Webinar</p>
+            <p className="text-sm font-bold text-slate-800">{fmtDate(day1)} <span className="text-slate-400 font-normal">→</span> {fmtDate(day2)}</p>
+          </div>
+        </div>
+        <div className="h-8 w-px bg-slate-200" />
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Enrollments</p>
+          <p className="text-sm font-bold text-blue-600">{info.enrollCount}</p>
+        </div>
+        <div className="h-8 w-px bg-slate-200" />
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pending Messages</p>
+          <p className="text-sm font-bold text-emerald-600">{info.pendingCount}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AutomationsView({ initialSub }: { initialSub?: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<'templates' | 'tags' | 'webinar'>(
@@ -2796,6 +2850,9 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Marketing & Automation</h1>
           <p className="text-slate-500 font-medium">Build automations and workflows for your LINE leads.</p>
         </header>
+
+        {/* Dashboard Info Bar */}
+        <DashboardBar />
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 w-fit">
