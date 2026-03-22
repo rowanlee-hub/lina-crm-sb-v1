@@ -1778,6 +1778,27 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                             </span>
                           );
                         })()}
+                        {wbEnrollment && wbEnrollment.status === 'active' && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Remove this contact from the webinar sequence? All pending messages will be cancelled.')) return;
+                              setWbRemoving(true);
+                              try {
+                                const res = await fetch(`/api/webinar-sequence/enrollments?id=${wbEnrollment.id}`, { method: 'DELETE' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  setWbEnrollment({ ...wbEnrollment, status: 'cancelled' });
+                                  setWbMessages(prev => prev.map((m: any) => m.status === 'pending' ? { ...m, status: 'cancelled' } : m));
+                                } else { alert(data.error || 'Failed to remove'); }
+                              } catch { alert('Failed to remove'); }
+                              finally { setWbRemoving(false); }
+                            }}
+                            disabled={wbRemoving}
+                            className="text-[10px] font-bold text-red-500 hover:text-red-700 disabled:opacity-50 px-1.5 py-0.5 rounded hover:bg-red-50"
+                          >
+                            {wbRemoving ? '...' : 'Remove'}
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="divide-y divide-slate-50">
