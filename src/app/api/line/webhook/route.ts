@@ -88,7 +88,7 @@ async function tryMergeByField(
   }
   console.log(`[Merge] Merging into contact id=${existing.id} name="${existing.name}"`);
 
-  const mergedTags = [...new Set([...(existing.tags || []), ...(lineContact?.tags || [])])];
+  const mergedTags = [...new Set([...(existing.tags || []), ...(lineContact?.tags || [])])].filter(t => t !== 'pending-match' && t !== 'Pending Match');
 
   // Delete LINE-only contact FIRST to free up the unique line_id before updating GHL contact
   if (lineContact) {

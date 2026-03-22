@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     if (ghlContact && lineContact && ghlContact.id !== lineContact.id) {
       // SCENARIO: Both exist as separate contacts → merge
       // Keep GHL contact, add line_id, merge tags, delete LINE-only contact
-      const mergedTags = [...new Set([...(ghlContact.tags || []), ...(lineContact.tags || [])])];
+      const mergedTags = [...new Set([...(ghlContact.tags || []), ...(lineContact.tags || [])])].filter(t => t !== 'pending-match' && t !== 'Pending Match');
 
       await supabase.from('contacts').update({
         line_id,
