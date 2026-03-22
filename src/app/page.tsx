@@ -2487,21 +2487,32 @@ function DashboardBar() {
     if (!info?.activeDate || enrolling) return;
     setEnrolling(true);
     setEnrollResult(null);
+    let totalEnrolled = 0;
+    let totalFailed = 0;
     try {
-      const res = await fetch('/api/webinar-sequence/enroll/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ webinar_date: info.activeDate }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setEnrollResult(`Enrolled ${data.enrolled} contacts${data.failed ? `, ${data.failed} failed` : ''}`);
-        loadDashboard();
-      } else {
-        setEnrollResult(`Error: ${data.error}`);
+      // Process in batches of 30 to avoid serverless timeout
+      let remaining = 1; // start loop
+      while (remaining > 0) {
+        setEnrollResult(`Enrolling... (${totalEnrolled} done so far)`);
+        const res = await fetch('/api/webinar-sequence/enroll/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ webinar_date: info.activeDate, limit: 30 }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          setEnrollResult(`Error: ${data.error} (${totalEnrolled} enrolled before error)`);
+          break;
+        }
+        totalEnrolled += data.enrolled || 0;
+        totalFailed += data.failed || 0;
+        remaining = data.remaining || 0;
+        if ((data.enrolled || 0) === 0) break; // safety: no progress
       }
+      setEnrollResult(`Done! Enrolled ${totalEnrolled} contacts${totalFailed ? `, ${totalFailed} failed` : ''}`);
+      loadDashboard();
     } catch {
-      setEnrollResult('Network error');
+      setEnrollResult(`Network error (${totalEnrolled} enrolled before error)`);
     } finally {
       setEnrolling(false);
     }

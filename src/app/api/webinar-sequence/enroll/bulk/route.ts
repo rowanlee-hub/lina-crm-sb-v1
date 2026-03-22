@@ -52,8 +52,10 @@ export async function POST(req: Request) {
 
     const enrolledIds = new Set((existingEnrollments || []).map(e => e.contact_id));
 
-    // Filter to only unenrolled contacts
-    const toEnroll = contacts.filter(c => !enrolledIds.has(c.id));
+    // Filter to only unenrolled contacts, limit batch size to avoid timeout
+    const batchSize = body.limit || 30;
+    const toEnroll = contacts.filter(c => !enrolledIds.has(c.id)).slice(0, batchSize);
+    const remaining = contacts.filter(c => !enrolledIds.has(c.id)).length - toEnroll.length;
 
     let enrolled = 0;
     let failed = 0;
@@ -72,6 +74,7 @@ export async function POST(req: Request) {
       success: true,
       enrolled,
       failed,
+      remaining,
       alreadyEnrolled: enrolledIds.size,
       totalWithTag: contacts.length,
       tag,
