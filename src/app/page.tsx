@@ -1477,12 +1477,6 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                             No Active Sequence
                           </span>
                         )}
-                        {wfEnrollments.filter((e: any) => e.status === 'active').length > 0 && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
-                            {wfEnrollments.filter((e: any) => e.status === 'active').length} Workflow{wfEnrollments.filter((e: any) => e.status === 'active').length > 1 ? 's' : ''} Active
-                          </span>
-                        )}
                       </div>
                     )}
                   </div>
@@ -1644,35 +1638,25 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                   </div>
                 </div>
 
+                {/* --- Notes --- */}
+                {!isNew && (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider flex items-center">
+                      <Bell className="w-4 h-4 mr-2 text-slate-400" />Notes
+                    </h3>
+                    <textarea
+                      rows={3}
+                      value={contact.follow_up_note || ''}
+                      onChange={(e) => setContact({...contact, follow_up_note: e.target.value})}
+                      placeholder="Add internal notes about this contact..."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all resize-none bg-white"
+                    />
+                  </div>
+                )}
+
               </div>
 
               <div className="space-y-6 flex flex-col h-full items-stretch">
-
-                <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-                    <div>
-                      <h4 className="text-sm font-bold text-emerald-800 tracking-wide">{contact.status.toUpperCase()} STATUS</h4>
-                      {contact.ghl_contact_id ? (
-                        <p className="text-xs text-emerald-600 flex items-center"><RefreshCw className="w-3 h-3 mr-1"/>Synced with GoHighLevel</p>
-                      ) : (
-                        <p className="text-xs text-slate-400">No GHL link</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="px-3 py-1 bg-white rounded-full border border-emerald-200 shadow-sm relative group overflow-hidden cursor-pointer">
-                    <select
-                       value={contact.status}
-                       onChange={(e) => setContact({...contact, status: e.target.value})}
-                       className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                    >
-                       <option value="Lead">Lead</option>
-                       <option value="Active">Active</option>
-                       <option value="Inactive">Inactive</option>
-                    </select>
-                    <span className="text-xs font-bold text-emerald-600 pointer-events-none group-hover:text-emerald-800">{contact.status} ▾</span>
-                  </div>
-                </div>
 
                 <div className="p-5 border border-slate-200 rounded-xl bg-white shadow-sm transition-shadow">
                   <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2 flex justify-between">
@@ -1734,22 +1718,6 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                     </div>
                   </div>
                 </div>
-
-                {/* --- Notes Section --- */}
-                {!isNew && (
-                  <div className="p-5 border border-slate-200 rounded-xl bg-white shadow-sm">
-                    <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2 flex items-center">
-                      <Bell className="w-4 h-4 mr-2 text-slate-400" />Notes
-                    </h3>
-                    <textarea
-                      rows={3}
-                      value={contact.follow_up_note || ''}
-                      onChange={(e) => setContact({...contact, follow_up_note: e.target.value})}
-                      placeholder="Add internal notes about this contact..."
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all resize-none"
-                    />
-                  </div>
-                )}
 
                 {/* --- Webinar Sequence Status --- */}
                 {!isNew && (
@@ -1863,192 +1831,7 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                   </div>
                 )}
 
-                {/* --- Automations Management --- */}
-                {!isNew && (
-                  <div className="border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
-                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Zap className="w-4 h-4 text-purple-500" />
-                        <h3 className="text-sm font-semibold text-slate-700 tracking-wide">Automations</h3>
-                      </div>
-                    </div>
-                    <div className="p-4 space-y-4">
-                      {/* Workflow Enrollments */}
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Workflows</p>
-                        {wfEnrollments.filter((e: any) => e.status === 'active').length === 0 ? (
-                          <p className="text-xs text-slate-400 italic mb-2">No active workflows</p>
-                        ) : (
-                          <div className="space-y-1.5 mb-2">
-                            {wfEnrollments.filter((e: any) => e.status === 'active').map((e: any) => (
-                              <div key={e.id} className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <Zap className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                                  <span className="text-xs font-semibold text-slate-700 truncate">{e.workflows?.name || 'Unknown'}</span>
-                                  <span className="text-[9px] font-bold text-purple-600 bg-purple-100 border border-purple-200 px-1.5 py-0.5 rounded-full shrink-0">Active</span>
-                                </div>
-                                <button
-                                  onClick={async () => {
-                                    if (!confirm(`Remove "${e.workflows?.name}" from this contact?`)) return;
-                                    setWfRemoving(e.id);
-                                    try {
-                                      const res = await fetch(`/api/workflows/enrollments?id=${e.id}`, { method: 'DELETE' });
-                                      const data = await res.json();
-                                      if (data.success) {
-                                        setWfEnrollments(prev => prev.map((en: any) => en.id === e.id ? { ...en, status: 'completed' } : en));
-                                      } else { alert(data.error || 'Failed to remove'); }
-                                    } catch { alert('Failed to remove'); }
-                                    finally { setWfRemoving(null); }
-                                  }}
-                                  disabled={wfRemoving === e.id}
-                                  className="text-[10px] font-bold text-red-500 hover:text-red-700 disabled:opacity-50 shrink-0 ml-2"
-                                >
-                                  {wfRemoving === e.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {/* Add workflow dropdown */}
-                        {(() => {
-                          const activeIds = wfEnrollments.filter((e: any) => e.status === 'active').map((e: any) => e.workflow_id);
-                          const available = allWorkflows.filter((w: any) => w.is_active && !activeIds.includes(w.id));
-                          if (available.length === 0) return null;
-                          return (
-                            <div className="flex items-center gap-2">
-                              <select
-                                id="wf-add-select"
-                                className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-1 focus:ring-purple-300 outline-none"
-                                defaultValue=""
-                              >
-                                <option value="" disabled>Add workflow…</option>
-                                {available.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                              </select>
-                              <button
-                                disabled={wfEnrolling}
-                                onClick={async () => {
-                                  const sel = (document.getElementById('wf-add-select') as HTMLSelectElement);
-                                  const wfId = sel?.value;
-                                  if (!wfId) return;
-                                  setWfEnrolling(true);
-                                  try {
-                                    const res = await fetch('/api/workflows/enrollments', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ contact_id: contactData.id, workflow_id: wfId }),
-                                    });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                      // Refetch enrollments
-                                      const r2 = await fetch(`/api/workflows/enrollments?contact_id=${contactData.id}`);
-                                      const d2 = await r2.json();
-                                      setWfEnrollments(Array.isArray(d2) ? d2 : []);
-                                      sel.value = '';
-                                    } else { alert(data.error || 'Failed to enroll'); }
-                                  } catch { alert('Failed to enroll'); }
-                                  finally { setWfEnrolling(false); }
-                                }}
-                                className="px-2.5 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
-                              >
-                                {wfEnrolling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                                Add
-                              </button>
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Webinar Sequence Enrollment */}
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Webinar Sequence</p>
-                        {wbEnrollment && wbEnrollment.status === 'active' ? (
-                          <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Calendar className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                              <span className="text-xs font-semibold text-slate-700">
-                                Webinar {new Date(wbEnrollment.webinar_date).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', year: 'numeric' })}
-                              </span>
-                              <span className="text-[9px] font-bold text-blue-600 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded-full shrink-0">Active</span>
-                            </div>
-                            <button
-                              onClick={async () => {
-                                if (!confirm('Remove this contact from the webinar sequence?')) return;
-                                setWbRemoving(true);
-                                try {
-                                  const res = await fetch(`/api/webinar-sequence/enrollments?id=${wbEnrollment.id}`, { method: 'DELETE' });
-                                  const data = await res.json();
-                                  if (data.success) {
-                                    setWbEnrollment({ ...wbEnrollment, status: 'cancelled' });
-                                    setWbMessages(prev => prev.map((m: any) => m.status === 'pending' ? { ...m, status: 'skipped' } : m));
-                                  } else { alert(data.error || 'Failed to remove'); }
-                                } catch { alert('Failed to remove'); }
-                                finally { setWbRemoving(false); }
-                              }}
-                              disabled={wbRemoving}
-                              className="text-[10px] font-bold text-red-500 hover:text-red-700 disabled:opacity-50 shrink-0 ml-2"
-                            >
-                              {wbRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <p className="text-xs text-slate-400 italic">Not enrolled in webinar sequence</p>
-                            {contact.webinar?.dateTime && (
-                              <button
-                                onClick={async () => {
-                                  if (!confirm(`Enroll this contact in webinar sequence for ${new Date(contact.webinar.dateTime).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', year: 'numeric' })}?`)) return;
-                                  setWbRemoving(true);
-                                  try {
-                                    const res = await fetch('/api/webinar-sequence/enroll', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ contact_id: contact.id }),
-                                    });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                      // Refresh enrollment and messages
-                                      const [enrRes, msgRes] = await Promise.all([
-                                        fetch(`/api/webinar-sequence/enrollments?contact_id=${contact.id}`).then(r => r.json()),
-                                        fetch(`/api/webinar-sequence/messages?contact_id=${contact.id}`).then(r => r.json()),
-                                      ]);
-                                      const enrollment = Array.isArray(enrRes) ? enrRes.find((e: any) => e.contact_id === contact.id && e.status === 'active') : null;
-                                      setWbEnrollment(enrollment ?? null);
-                                      setWbMessages(Array.isArray(msgRes) ? msgRes : []);
-                                    } else { alert(data.error || 'Failed to enroll'); }
-                                  } catch { alert('Failed to enroll'); }
-                                  finally { setWbRemoving(false); }
-                                }}
-                                disabled={wbRemoving}
-                                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                              >
-                                {wbRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                                Enroll in Sequence
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Completed/past enrollments summary */}
-                      {wfEnrollments.filter((e: any) => e.status !== 'active').length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Past Workflows</p>
-                          <div className="space-y-1">
-                            {wfEnrollments.filter((e: any) => e.status !== 'active').map((e: any) => (
-                              <div key={e.id} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg">
-                                <Zap className="w-3 h-3 text-slate-300 shrink-0" />
-                                <span className="text-xs text-slate-500 truncate">{e.workflows?.name || 'Unknown'}</span>
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${e.status === 'completed' ? 'text-green-600 bg-green-50 border border-green-100' : 'text-slate-400 bg-slate-100 border border-slate-200'}`}>
-                                  {e.status === 'completed' ? 'Completed' : e.status}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                {/* Removed Automations/Workflow section */}
 
                 {/* --- Activity History --- */}
                 {!isNew && (
