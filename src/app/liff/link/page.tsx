@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
-type LinkStatus = 'loading' | 'linking' | 'success' | 'error' | 'no-email';
+type LinkStatus = 'loading' | 'linking' | 'success' | 'error' | 'ask-email';
 
 export default function LiffLinkPage() {
   const [status, setStatus] = useState<LinkStatus>('loading');
   const [message, setMessage] = useState('正在連接你的帳號...');
   const [userName, setUserName] = useState('');
   const [hasWebinarLink, setHasWebinarLink] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const liffRef = useRef<any>(null);
+  const profileRef = useRef<any>(null);
 
   useEffect(() => {
     initLiff();
@@ -16,8 +19,8 @@ export default function LiffLinkPage() {
 
   async function initLiff() {
     try {
-      // Dynamic import LIFF SDK first — need it to extract liff.state
       const liff = (await import('@line/liff')).default;
+      liffRef.current = liff;
       const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
 
       if (!liffId) {
@@ -28,44 +31,8 @@ export default function LiffLinkPage() {
 
       await liff.init({ liffId });
 
-      // Extract email from multiple possible locations:
-      // 1. Normal URL search params (direct open / LINE in-app browser)
-      // 2. liff.state (external browser after OAuth redirect)
-      // 3. Hash params (some LIFF versions)
-      function extractEmail(): string | null {
-        // Try normal URL params first
-        const urlParams = new URLSearchParams(window.location.search);
-        const fromUrl = urlParams.get('email');
-        if (fromUrl) return fromUrl;
-
-        // Try liff.state — LIFF puts original query params here after OAuth redirect
-        const stateParam = urlParams.get('liff.state');
-        if (stateParam) {
-          // liff.state can be "?email=xxx" or "email=xxx" or "/path?email=xxx"
-          const stateMatch = stateParam.match(/[?&]?email=([^&]+)/);
-          if (stateMatch) return decodeURIComponent(stateMatch[1]);
-        }
-
-        // Try hash
-        if (window.location.hash) {
-          const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
-          const fromHash = hashParams.get('email');
-          if (fromHash) return fromHash;
-        }
-
-        return null;
-      }
-
-      const email = extractEmail();
-      if (!email) {
-        setStatus('no-email');
-        setMessage('缺少電郵資訊，請從正確的連結進入。\nMissing email parameter.');
-        return;
-      }
-
       // Check if user is logged in to LINE
       if (!liff.isLoggedIn()) {
-        // Redirect to LINE login — will come back here after login
         liff.login({ redirectUri: window.location.href });
         return;
       }
@@ -73,10 +40,8 @@ export default function LiffLinkPage() {
       // Check friendship status
       const friendship = await liff.getFriendship();
       if (!friendship.friendFlag) {
-        // Not a friend yet — show add friend prompt
         setStatus('error');
         setMessage('請先加我們為好友，再重新點擊連結。\nPlease add us as a friend first, then click the link again.');
-        // Open add friend page
         const botBasicId = process.env.NEXT_PUBLIC_LINE_BOT_BASIC_ID;
         if (botBasicId) {
           window.location.href = `https://line.me/R/ti/p/${botBasicId}`;
@@ -86,50 +51,96 @@ export default function LiffLinkPage() {
 
       // Get user profile
       const profile = await liff.getProfile();
+      profileRef.current = profile;
       setUserName(profile.displayName);
-      setStatus('linking');
-      setMessage('正在連結你的帳號...');
 
-      // Call our API to link email + LINE userId
-      const response = await fetch('/api/line/link-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email,
-          line_id: profile.userId,
-          display_name: profile.displayName,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setHasWebinarLink(result.has_webinar_link && result.action !== 'email_saved');
-        setUserName(result.name || profile.displayName);
-
-        if (result.action === 'already_linked') {
-          setStatus('success');
-          setMessage(result.has_webinar_link
-            ? '你的帳號已經連結成功！直播連結已發送到 LINE。\nYour account is already linked! Webinar link sent to LINE.'
-            : '你的帳號已經連結成功！\nYour account is already linked!');
-        } else if (result.action === 'email_saved') {
-          setStatus('success');
-          setMessage('電郵已儲存！當你的直播連結準備好時，我們會自動發送給你。\nEmail saved! We\'ll send your webinar link automatically when ready.');
-        } else {
-          setStatus('success');
-          setMessage(result.has_webinar_link
-            ? '帳號連結成功！直播連結已發送到 LINE。\nAccount linked! Webinar link sent to LINE.'
-            : '帳號連結成功！\nAccount linked successfully!');
-        }
+      // Try to extract email from URL
+      const email = extractEmail();
+      if (email) {
+        await linkAccount(email, profile);
       } else {
-        setStatus('error');
-        setMessage(result.error || 'Something went wrong. Please try again.');
+        // No email in URL — ask user to enter it
+        setStatus('ask-email');
+        setMessage('請輸入你註冊時使用的電郵地址\nPlease enter the email you used to sign up');
       }
 
     } catch (err: any) {
       console.error('[LIFF] Error:', err);
       setStatus('error');
       setMessage(`連結失敗，請重試。\nFailed to link: ${err.message || 'Unknown error'}`);
+    }
+  }
+
+  function extractEmail(): string | null {
+    const urlParams = new URLSearchParams(window.location.search);
+    const fromUrl = urlParams.get('email');
+    if (fromUrl && !fromUrl.includes('{{')) return fromUrl;
+
+    const stateParam = urlParams.get('liff.state');
+    if (stateParam) {
+      const stateMatch = stateParam.match(/[?&]?email=([^&]+)/);
+      if (stateMatch) {
+        const decoded = decodeURIComponent(stateMatch[1]);
+        if (!decoded.includes('{{')) return decoded;
+      }
+    }
+
+    if (window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
+      const fromHash = hashParams.get('email');
+      if (fromHash && !fromHash.includes('{{')) return fromHash;
+    }
+
+    return null;
+  }
+
+  async function linkAccount(email: string, profile: any) {
+    setStatus('linking');
+    setMessage('正在連結你的帳號...');
+
+    const response = await fetch('/api/line/link-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        line_id: profile.userId,
+        display_name: profile.displayName,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      setHasWebinarLink(result.has_webinar_link && result.action !== 'email_saved');
+      setUserName(result.name || profile.displayName);
+
+      if (result.action === 'already_linked') {
+        setStatus('success');
+        setMessage(result.has_webinar_link
+          ? '你的帳號已經連結成功！直播連結已發送到 LINE。\nYour account is already linked! Webinar link sent to LINE.'
+          : '你的帳號已經連結成功！\nYour account is already linked!');
+      } else if (result.action === 'email_saved') {
+        setStatus('success');
+        setMessage('電郵已儲存！當你的直播連結準備好時，我們會自動發送給你。\nEmail saved! We\'ll send your webinar link automatically when ready.');
+      } else {
+        setStatus('success');
+        setMessage(result.has_webinar_link
+          ? '帳號連結成功！直播連結已發送到 LINE。\nAccount linked! Webinar link sent to LINE.'
+          : '帳號連結成功！\nAccount linked successfully!');
+      }
+    } else {
+      setStatus('error');
+      setMessage(result.error || 'Something went wrong. Please try again.');
+    }
+  }
+
+  async function handleEmailSubmit() {
+    if (!emailInput.trim() || !profileRef.current) return;
+    try {
+      await linkAccount(emailInput, profileRef.current);
+    } catch (err: any) {
+      setStatus('error');
+      setMessage(`連結失敗，請重試。\nFailed: ${err.message}`);
     }
   }
 
@@ -159,7 +170,7 @@ export default function LiffLinkPage() {
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>
           {status === 'loading' || status === 'linking' ? '⏳' :
            status === 'success' ? '✅' :
-           status === 'no-email' ? '❓' : '❌'}
+           status === 'ask-email' ? '📧' : '❌'}
         </div>
 
         {/* Title */}
@@ -167,6 +178,7 @@ export default function LiffLinkPage() {
           {status === 'success' ? `歡迎, ${userName}!` :
            status === 'loading' ? '連接中...' :
            status === 'linking' ? '正在連結...' :
+           status === 'ask-email' ? `Hi ${userName}!` :
            '連結帳號'}
         </h1>
 
@@ -180,6 +192,46 @@ export default function LiffLinkPage() {
         }}>
           {message}
         </p>
+
+        {/* Ask email: input form */}
+        {status === 'ask-email' && (
+          <div style={{ marginBottom: '16px' }}>
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="your@email.com"
+              onKeyDown={(e) => e.key === 'Enter' && handleEmailSubmit()}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                fontSize: '16px',
+                border: '2px solid #e0e0e0',
+                borderRadius: '12px',
+                marginBottom: '12px',
+                boxSizing: 'border-box',
+                outline: 'none',
+              }}
+            />
+            <button
+              onClick={handleEmailSubmit}
+              disabled={!emailInput.trim()}
+              style={{
+                background: emailInput.trim() ? '#06C755' : '#ccc',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '14px 32px',
+                fontSize: '16px',
+                fontWeight: 600,
+                cursor: emailInput.trim() ? 'pointer' : 'default',
+                width: '100%',
+              }}
+            >
+              連結帳號 Link Account
+            </button>
+          </div>
+        )}
 
         {/* Success: show webinar link info */}
         {status === 'success' && hasWebinarLink && (
