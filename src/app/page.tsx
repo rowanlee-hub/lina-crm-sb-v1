@@ -4121,7 +4121,7 @@ function LineMatchView() {
 
               {/* Two-column header */}
               <div className="grid grid-cols-2 text-[10px] font-bold text-slate-400 uppercase px-3 py-2 bg-slate-50 border-b border-slate-100">
-                <span>Email Contacts (GHL)</span>
+                <span>Email Contacts (No LINE)</span>
                 <span>LINE Contacts (Display Name)</span>
               </div>
 

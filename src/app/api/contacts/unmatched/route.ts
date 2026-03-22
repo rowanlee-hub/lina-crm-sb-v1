@@ -18,7 +18,7 @@ export async function GET() {
     .neq('line_id', '')
     .or('email.is.null,email.eq.')
     .order('created_at', { ascending: false })
-    .limit(500);
+    .limit(1000);
 
   // Email contacts without line_id
   // Two queries to handle both null and empty string for line_id
@@ -29,7 +29,7 @@ export async function GET() {
     .not('email', 'is', null)
     .neq('email', '')
     .order('created_at', { ascending: false })
-    .limit(500);
+    .limit(1000);
 
   const { data: emailEmptyLine } = await supabase
     .from('contacts')
@@ -38,7 +38,7 @@ export async function GET() {
     .not('email', 'is', null)
     .neq('email', '')
     .order('created_at', { ascending: false })
-    .limit(500);
+    .limit(1000);
 
   // Merge and deduplicate
   const emailMap = new Map<string, any>();
