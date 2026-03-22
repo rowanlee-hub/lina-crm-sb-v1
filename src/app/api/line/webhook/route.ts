@@ -213,7 +213,11 @@ export async function POST(req: Request) {
           // Trigger USER_FOLLOW automation
           processAutomations('USER_FOLLOW', 'FOLLOW', contact.id, userId);
         } else {
-          // Returning follower (block/unblock)
+          // Returning follower (block/unblock) — remove blocked tag
+          const refolTags = (contact.tags || []).filter((t: string) => t !== 'blocked');
+          if (refolTags.length !== (contact.tags || []).length) {
+            await supabase.from('contacts').update({ tags: refolTags, updated_at: new Date().toISOString() }).eq('id', contact.id);
+          }
           await supabase.from('contact_history').insert({ contact_id: contact.id, action: 'Event: Re-follow (was blocked)' });
           console.log(`[Webhook] Returning follower ${userId} — checking enrollment status`);
 
@@ -240,6 +244,32 @@ export async function POST(req: Request) {
 
           // Trigger REFOLLOW automation so user can set up a different welcome message
           processAutomations('USER_FOLLOW', 'REFOLLOW', contact.id, userId);
+        }
+      }
+
+      // ─── UNFOLLOW event: user blocked the OA ───
+      else if (event.type === 'unfollow') {
+        console.log(`[Webhook] User ${userId} blocked/unfollowed.`);
+        const { data: contact } = await supabase
+          .from('contacts')
+          .select('id, tags')
+          .eq('line_id', userId)
+          .single();
+
+        if (contact) {
+          const tags: string[] = contact.tags || [];
+          if (!tags.includes('blocked')) {
+            tags.push('blocked');
+          }
+          await supabase.from('contacts').update({
+            tags,
+            updated_at: new Date().toISOString(),
+          }).eq('id', contact.id);
+
+          await supabase.from('contact_history').insert({
+            contact_id: contact.id,
+            action: 'Event: Blocked/unfollowed the OA',
+          });
         }
       }
 
