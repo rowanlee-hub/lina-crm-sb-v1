@@ -1801,10 +1801,43 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                         )}
                       </div>
                     </div>
+                    {(!wbEnrollment || wbEnrollment.status !== 'active') && contact.webinar?.dateTime && (
+                      <div className="px-4 py-3 border-b border-slate-100">
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Enroll in webinar sequence for ${new Date(contact.webinar.dateTime).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}?`)) return;
+                            setWbRemoving(true);
+                            try {
+                              const res = await fetch('/api/webinar-sequence/enroll', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ contact_id: contact.id }),
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                const [enrRes, msgRes] = await Promise.all([
+                                  fetch(`/api/webinar-sequence/enrollments?contact_id=${contact.id}`).then(r => r.json()),
+                                  fetch(`/api/webinar-sequence/messages?contact_id=${contact.id}`).then(r => r.json()),
+                                ]);
+                                const enrollment = Array.isArray(enrRes) ? enrRes.find((e: any) => e.contact_id === contact.id && e.status === 'active') : null;
+                                setWbEnrollment(enrollment ?? null);
+                                setWbMessages(Array.isArray(msgRes) ? msgRes : []);
+                              } else { alert(data.error || 'Failed to enroll'); }
+                            } catch { alert('Failed to enroll'); }
+                            finally { setWbRemoving(false); }
+                          }}
+                          disabled={wbRemoving}
+                          className="w-full px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                        >
+                          {wbRemoving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                          Enroll in Webinar Sequence
+                        </button>
+                      </div>
+                    )}
                     <div className="divide-y divide-slate-50">
-                      {wbMessages.length === 0 ? (
+                      {wbMessages.length === 0 && (!wbEnrollment || wbEnrollment.status === 'active') ? (
                         <p className="px-4 py-3 text-xs text-slate-400">No sequence messages scheduled.</p>
-                      ) : (
+                      ) : wbMessages.length === 0 ? null : (
                         wbMessages.map((msg: any) => {
                           const statusColor = msg.status === 'sent' ? 'text-emerald-600 bg-emerald-50' : msg.status === 'failed' ? 'text-red-500 bg-red-50' : msg.status === 'skipped' ? 'text-slate-400 bg-slate-100' : 'text-blue-600 bg-blue-50';
                           return (
