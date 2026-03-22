@@ -3340,7 +3340,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                   <h3 className="font-bold text-slate-800">Reminder Steps</h3>
                   <p className="text-xs text-slate-400 mt-0.5">Messages sent based on days before the webinar. Supports: {'{{name}}'}, {'{{webinar_date}}'}, {'{{webinar_link}}'}</p>
                 </div>
-                <button onClick={() => { setWbStepForm(true); setWbEditingStep(null); setWbDaysBefore(6); setWbSendHour(9); setWbMessage(''); setWbMessageNoLink(''); setWbBlocks([{ type: 'text', content: '' }]); setWbBlocksNoLink([{ type: 'text', content: '' }]); }}
+                <button onClick={() => { setWbStepForm(true); setWbEditingStep(null); setWbDaysBefore(6); setWbSendHour(9); setWbMessage(''); setWbMessageNoLink(''); setWbBlocks([{ type: 'text', content: '' }]); setWbBlocksNoLink([]); }}
                   className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">
                   <Plus className="w-4 h-4" /><span>Add Step</span>
                 </button>
@@ -3466,6 +3466,9 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                       </label>
                       <p className="text-[10px] text-slate-400 mb-2">If empty, contacts without a link will receive the same message as above.</p>
                       <div className="space-y-2">
+                        {wbBlocksNoLink.length === 0 && (
+                          <p className="text-xs text-slate-400 italic py-1">No separate message set. Click &quot;Add Block&quot; below to create one.</p>
+                        )}
                         {wbBlocksNoLink.map((block, idx) => (
                           <div key={idx} className="bg-amber-50/30 border border-amber-200 rounded-lg p-3 space-y-2 relative">
                             <div className="flex items-center justify-between">
@@ -3645,7 +3648,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                         >
                           {wbTestingStepId === step.id ? '…' : 'Test'}
                         </button>
-                        <button onClick={() => { setWbEditingStep(step); setWbDaysBefore(step.days_before); setWbSendHour(step.send_hour); setWbMessage(step.message); setWbMessageNoLink(step.message_no_link || ''); setWbBlocks(messageToBlocks(step.message)); setWbBlocksNoLink(step.message_no_link ? messageToBlocks(step.message_no_link) : [{ type: 'text', content: '' }]); setWbStepForm(true); }}
+                        <button onClick={() => { setWbEditingStep(step); setWbDaysBefore(step.days_before); setWbSendHour(step.send_hour); setWbMessage(step.message); setWbMessageNoLink(step.message_no_link || ''); setWbBlocks(messageToBlocks(step.message)); setWbBlocksNoLink(step.message_no_link ? messageToBlocks(step.message_no_link) : []); setWbStepForm(true); }}
                           className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit step">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
