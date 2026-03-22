@@ -144,7 +144,7 @@ export async function POST(req: Request) {
 
       // Auto-enroll in webinar sequence if webinar_date is new or changed
       const prevWebinarDate = existingContact.webinar_date;
-      if (webinar_date && webinar_date !== prevWebinarDate) {
+      if (webinar_date && webinar_date.substring(0, 10) !== (prevWebinarDate || '').substring(0, 10)) {
         const { enrollInWebinarSequence } = await import('@/lib/webinar-sequence');
         enrollInWebinarSequence(existingContact.id, webinar_date, name || existingContact.name).catch(console.error);
       }

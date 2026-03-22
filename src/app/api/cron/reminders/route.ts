@@ -243,8 +243,13 @@ async function sendLineMessage(token: string, lineId: string, message: string): 
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ to: lineId, messages: lineMessages }),
     });
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      console.error(`[LINE Send] Failed for ${lineId}: ${response.status} ${errBody}`);
+    }
     return response.ok;
-  } catch {
+  } catch (err) {
+    console.error(`[LINE Send] Error for ${lineId}:`, err);
     return false;
   }
 }
