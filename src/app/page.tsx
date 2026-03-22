@@ -4028,10 +4028,13 @@ function LineMatchView() {
   const [merging, setMerging] = useState<string | null>(null);
   const [lineSearch, setLineSearch] = useState('');
 
-  const fetchUnmatched = async () => {
+  const fetchUnmatched = async (eq?: string, lq?: string) => {
     setMergeLoading(true);
     try {
-      const res = await fetch('/api/contacts/unmatched');
+      const params = new URLSearchParams();
+      if (eq || emailSearch) params.set('email_q', eq ?? emailSearch);
+      if (lq || lineSearch) params.set('line_q', lq ?? lineSearch);
+      const res = await fetch(`/api/contacts/unmatched?${params}`);
       const data = await res.json();
       setLineOnly(data.line_only || []);
       setEmailOnly(data.email_only || []);
@@ -4099,23 +4102,33 @@ function LineMatchView() {
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
               {/* Search bars */}
               <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100">
-                <div className="p-2">
+                <div className="p-2 flex gap-1">
                   <input
                     type="text"
                     value={emailSearch}
                     onChange={e => setEmailSearch(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && fetchUnmatched(emailSearch, lineSearch)}
                     placeholder="Search email or name..."
-                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
+                    className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
                   />
+                  <button onClick={() => fetchUnmatched(emailSearch, lineSearch)}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 flex-shrink-0">
+                    Search
+                  </button>
                 </div>
-                <div className="p-2">
+                <div className="p-2 flex gap-1">
                   <input
                     type="text"
                     value={lineSearch}
                     onChange={e => setLineSearch(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && fetchUnmatched(emailSearch, lineSearch)}
                     placeholder="Search display name or user ID..."
-                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
+                    className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white"
                   />
+                  <button onClick={() => fetchUnmatched(emailSearch, lineSearch)}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 flex-shrink-0">
+                    Search
+                  </button>
                 </div>
               </div>
 
@@ -4128,13 +4141,7 @@ function LineMatchView() {
               <div className="grid grid-cols-2 divide-x divide-slate-100" style={{ maxHeight: '60vh', overflow: 'hidden' }}>
                 {/* Left: Email contacts */}
                 <div className="overflow-y-auto" style={{ maxHeight: '60vh' }}>
-                  {emailOnly
-                    .filter(ec => {
-                      if (!emailSearch.trim()) return true;
-                      const q = emailSearch.toLowerCase();
-                      return (ec.name || '').toLowerCase().includes(q) || (ec.email || '').toLowerCase().includes(q);
-                    })
-                    .map(ec => (
+                  {emailOnly.map(ec => (
                     <div key={ec.id}
                       onClick={() => !ec.linked && setSelectedLine(selectedLine?.id === ec.id ? null : ec)}
                       className={`flex items-center gap-2 px-3 py-2 border-b border-slate-50 transition-colors ${ec.linked ? 'opacity-60' : 'cursor-pointer'} ${selectedLine?.id === ec.id ? 'bg-amber-50 border-l-2 border-l-amber-400' : ec.linked ? 'bg-emerald-50/30' : 'hover:bg-slate-50'}`}>
@@ -4145,11 +4152,7 @@ function LineMatchView() {
                       {ec.linked && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex-shrink-0">Linked</span>}
                     </div>
                   ))}
-                  {emailOnly.filter(ec => {
-                    if (!emailSearch.trim()) return true;
-                    const q = emailSearch.toLowerCase();
-                    return (ec.name || '').toLowerCase().includes(q) || (ec.email || '').toLowerCase().includes(q);
-                  }).length === 0 && (
+                  {emailOnly.length === 0 && (
                     <p className="text-xs text-slate-400 text-center py-4">No results</p>
                   )}
                 </div>
@@ -4161,11 +4164,7 @@ function LineMatchView() {
                       <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 sticky top-0">
                         <p className="text-[10px] font-bold text-amber-600">Merging into: {selectedLine.email}</p>
                       </div>
-                      {lineOnly.filter(lc => {
-                        if (!lineSearch.trim()) return true;
-                        const q = lineSearch.toLowerCase();
-                        return (lc.name || '').toLowerCase().includes(q) || (lc.line_id || '').toLowerCase().includes(q);
-                      }).map(lc => (
+                      {lineOnly.map(lc => (
                         <div key={lc.id} className="flex items-center justify-between px-3 py-2 border-b border-slate-50 hover:bg-blue-50/30">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold text-slate-700">{lc.name || 'No Name'}</p>
@@ -4183,11 +4182,7 @@ function LineMatchView() {
                     </>
                   ) : (
                     <>
-                      {lineOnly.filter(lc => {
-                        if (!lineSearch.trim()) return true;
-                        const q = lineSearch.toLowerCase();
-                        return (lc.name || '').toLowerCase().includes(q) || (lc.line_id || '').toLowerCase().includes(q);
-                      }).map(lc => (
+                      {lineOnly.map(lc => (
                         <div key={lc.id} className="flex items-center px-3 py-2 border-b border-slate-50">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold text-slate-700">{lc.name || 'No Name'}</p>
@@ -4196,11 +4191,7 @@ function LineMatchView() {
                           <span className="text-[10px] text-slate-300 flex-shrink-0">select email first</span>
                         </div>
                       ))}
-                      {lineOnly.filter(lc => {
-                        if (!lineSearch.trim()) return true;
-                        const q = lineSearch.toLowerCase();
-                        return (lc.name || '').toLowerCase().includes(q) || (lc.line_id || '').toLowerCase().includes(q);
-                      }).length === 0 && (
+                      {lineOnly.length === 0 && (
                         <p className="text-xs text-slate-400 text-center py-4">No results</p>
                       )}
                     </>
