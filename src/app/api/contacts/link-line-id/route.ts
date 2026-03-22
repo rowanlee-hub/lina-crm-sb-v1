@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { enrollInWebinarSequence } from '@/lib/webinar-sequence';
 
 type ImportRow = {
   line_id: string;
@@ -90,6 +91,12 @@ async function processRow(row: ImportRow): Promise<RowResult> {
         action: `CSV import: updated ${actions.join(', ')}`,
       }).then(() => {});
 
+      // Auto-enroll in webinar sequence if webinar_date is upcoming
+      const finalWebinarDate = safeWebinarDate || existing.webinar_date;
+      if (finalWebinarDate && lineId) {
+        tryAutoEnroll(existing.id, finalWebinarDate, existing.name || displayName || '');
+      }
+
       return { ...base, status: existing.line_id ? 'updated' : 'linked' };
     }
 
@@ -123,9 +130,30 @@ async function processRow(row: ImportRow): Promise<RowResult> {
       action: `Contact created via LINE CSV import${webinarTag ? ` [${webinarTag}]` : ''}`,
     }).then(() => {});
 
+    // Auto-enroll in webinar sequence if webinar_date is upcoming
+    if (safeWebinarDate) {
+      tryAutoEnroll(newContact.id, safeWebinarDate, displayName || '');
+    }
+
     return { ...base, status: 'created' };
   } catch {
     return { ...base, status: 'skipped' };
+  }
+}
+
+async function tryAutoEnroll(contactId: string, webinarDate: string, name: string) {
+  try {
+    // Get the active webinar date from settings
+    const { data: setting } = await supabase.from('settings').select('value').eq('key', 'active_webinar_date').single();
+    const activeDate = setting?.value || '';
+
+    // Only enroll if webinar_date is today or in the future
+    const today = new Date().toISOString().substring(0, 10);
+    if (webinarDate.substring(0, 10) >= today) {
+      enrollInWebinarSequence(contactId, webinarDate, name).catch(console.error);
+    }
+  } catch {
+    // Silent fail — enrollment is best-effort
   }
 }
 
