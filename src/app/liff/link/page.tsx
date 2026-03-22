@@ -16,17 +16,7 @@ export default function LiffLinkPage() {
 
   async function initLiff() {
     try {
-      // Get email from URL params
-      const params = new URLSearchParams(window.location.search);
-      const email = params.get('email');
-
-      if (!email) {
-        setStatus('no-email');
-        setMessage('缺少電郵資訊，請從正確的連結進入。\nMissing email parameter.');
-        return;
-      }
-
-      // Dynamic import LIFF SDK
+      // Dynamic import LIFF SDK first — need it to extract liff.state
       const liff = (await import('@line/liff')).default;
       const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
 
@@ -37,6 +27,41 @@ export default function LiffLinkPage() {
       }
 
       await liff.init({ liffId });
+
+      // Extract email from multiple possible locations:
+      // 1. Normal URL search params (direct open / LINE in-app browser)
+      // 2. liff.state (external browser after OAuth redirect)
+      // 3. Hash params (some LIFF versions)
+      function extractEmail(): string | null {
+        // Try normal URL params first
+        const urlParams = new URLSearchParams(window.location.search);
+        const fromUrl = urlParams.get('email');
+        if (fromUrl) return fromUrl;
+
+        // Try liff.state — LIFF puts original query params here after OAuth redirect
+        const stateParam = urlParams.get('liff.state');
+        if (stateParam) {
+          // liff.state can be "?email=xxx" or "email=xxx" or "/path?email=xxx"
+          const stateMatch = stateParam.match(/[?&]?email=([^&]+)/);
+          if (stateMatch) return decodeURIComponent(stateMatch[1]);
+        }
+
+        // Try hash
+        if (window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
+          const fromHash = hashParams.get('email');
+          if (fromHash) return fromHash;
+        }
+
+        return null;
+      }
+
+      const email = extractEmail();
+      if (!email) {
+        setStatus('no-email');
+        setMessage('缺少電郵資訊，請從正確的連結進入。\nMissing email parameter.');
+        return;
+      }
 
       // Check if user is logged in to LINE
       if (!liff.isLoggedIn()) {
