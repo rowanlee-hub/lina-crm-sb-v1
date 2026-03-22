@@ -1464,6 +1464,26 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                       {!isNew && copyIcon(contact.name, 'nameHeader')}
                     </div>
                     <p className="text-sm text-slate-500 font-medium">{isNew ? "Create a New Contact" : "Single Contact View"}</p>
+                    {!isNew && (
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {wbEnrollment && wbEnrollment.status === 'active' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Webinar Sequence Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 border border-slate-200">
+                            No Active Sequence
+                          </span>
+                        )}
+                        {wfEnrollments.filter((e: any) => e.status === 'active').length > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                            {wfEnrollments.filter((e: any) => e.status === 'active').length} Workflow{wfEnrollments.filter((e: any) => e.status === 'active').length > 1 ? 's' : ''} Active
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1731,22 +1751,34 @@ function ContactDetailView({ contactData, onBack, onSaveSuccess, isNew, allConta
                 )}
 
                 {/* --- Webinar Sequence Status --- */}
-                {!isNew && (wbEnrollment || wbMessages.length > 0) && (
+                {!isNew && (
                   <div className="border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
                     <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <Calendar className="w-4 h-4 text-blue-500" />
                         <h3 className="text-sm font-semibold text-slate-700 tracking-wide">Webinar Sequence</h3>
                       </div>
-                      {wbEnrollment && (() => {
-                        const wDate = new Date(wbEnrollment.webinar_date);
-                        const isPast = wDate < new Date();
-                        return (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isPast ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                            {isPast ? 'Past webinar' : 'Upcoming webinar'} · {wDate.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </span>
-                        );
-                      })()}
+                      <div className="flex items-center gap-2">
+                        {wbMessages.length > 0 && (() => {
+                          const pending = wbMessages.filter((m: any) => m.status === 'pending').length;
+                          const sent = wbMessages.filter((m: any) => m.status === 'sent').length;
+                          const total = wbMessages.length;
+                          return (
+                            <span className="text-[10px] font-medium text-slate-500">
+                              {sent}/{total} sent · {pending} pending
+                            </span>
+                          );
+                        })()}
+                        {wbEnrollment && (() => {
+                          const wDate = new Date(wbEnrollment.webinar_date);
+                          const isPast = wDate < new Date();
+                          return (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isPast ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                              {isPast ? 'Past webinar' : 'Upcoming webinar'} · {wDate.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </div>
                     <div className="divide-y divide-slate-50">
                       {wbMessages.length === 0 ? (
