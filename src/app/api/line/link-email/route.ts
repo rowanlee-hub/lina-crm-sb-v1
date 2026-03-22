@@ -97,7 +97,11 @@ export async function POST(req: Request) {
       // SCENARIO: GHL contact exists, either no LINE contact or same record
       // Just update with line_id
       if (ghlContact.line_id === line_id) {
-        // Already linked
+        // Already linked — still send webinar link (user coming from landing page expects it)
+        if (ghlContact.webinar_link) {
+          const { autoPushWebinarLink } = await import('@/lib/webinar-utils');
+          autoPushWebinarLink({ ...ghlContact, line_id }).catch(console.error);
+        }
         return NextResponse.json({
           success: true,
           action: 'already_linked',

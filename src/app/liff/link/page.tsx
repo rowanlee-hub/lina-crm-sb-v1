@@ -104,18 +104,22 @@ export default function LiffLinkPage() {
       const result = await response.json();
 
       if (result.success) {
-        setHasWebinarLink(result.has_webinar_link);
+        setHasWebinarLink(result.has_webinar_link && result.action !== 'email_saved');
         setUserName(result.name || profile.displayName);
 
         if (result.action === 'already_linked') {
           setStatus('success');
-          setMessage('你的帳號已經連結成功！\nYour account is already linked!');
+          setMessage(result.has_webinar_link
+            ? '你的帳號已經連結成功！直播連結已發送到 LINE。\nYour account is already linked! Webinar link sent to LINE.'
+            : '你的帳號已經連結成功！\nYour account is already linked!');
         } else if (result.action === 'email_saved') {
           setStatus('success');
           setMessage('電郵已儲存！當你的直播連結準備好時，我們會自動發送給你。\nEmail saved! We\'ll send your webinar link automatically when ready.');
         } else {
           setStatus('success');
-          setMessage('帳號連結成功！\nAccount linked successfully!');
+          setMessage(result.has_webinar_link
+            ? '帳號連結成功！直播連結已發送到 LINE。\nAccount linked! Webinar link sent to LINE.'
+            : '帳號連結成功！\nAccount linked successfully!');
         }
       } else {
         setStatus('error');
