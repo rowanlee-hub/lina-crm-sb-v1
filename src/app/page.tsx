@@ -3383,9 +3383,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                       <label className="text-xs text-slate-500 font-medium">Send Time</label>
                       <select value={wbSendHour} onChange={e => setWbSendHour(Number(e.target.value))}
                         className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
-                        {Array.from({length:24},(_,i)=>i).map(h => (
-                          <option key={h} value={h}>{String(h).padStart(2,'0')}:00 ({h<12?`${h===0?12:h}am`:`${h===12?12:h-12}pm`})</option>
-                        ))}
+                        {Array.from({length:24*6},(_,i)=>{ const h=Math.floor(i/6); const m=i%6*10; const v=h+m/100; const ampm=h<12?'am':'pm'; const h12=h===0?12:h>12?h-12:h; return <option key={i} value={v}>{String(h).padStart(2,'0')}:{String(m).padStart(2,'0')} ({h12}:{String(m).padStart(2,'0')}{ampm})</option>; })}
                       </select>
                     </div>
                   </div>
@@ -3622,7 +3620,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                       <div className="flex items-start space-x-3 p-3">
                         <div className="flex-shrink-0 w-16 text-center">
                           <span className="text-2xl font-black text-blue-600">{step.days_before >= 0 ? ['Wed','Tue','Mon','Sun','Sat','Fri','Thu'][step.days_before] || `D-${step.days_before}` : ['Wed','Thu','Fri','Sat','Sun','Mon','Tue'][-step.days_before] || `D+${-step.days_before}`}</span>
-                          <p className="text-[10px] text-slate-400">{step.days_before > 0 ? `D-${step.days_before}` : step.days_before === 0 ? 'Webinar Day' : `D+${-step.days_before}`} · {step.send_hour}:00</p>
+                          <p className="text-[10px] text-slate-400">{step.days_before > 0 ? `D-${step.days_before}` : step.days_before === 0 ? 'Webinar Day' : `D+${-step.days_before}`} · {String(Math.floor(step.send_hour)).padStart(2,'0')}:{String(Math.round((step.send_hour % 1) * 100)).padStart(2,'0')}</p>
                         </div>
                         <div className="flex-1 space-y-1.5">
                           <div className="flex items-center gap-1.5 mb-1">

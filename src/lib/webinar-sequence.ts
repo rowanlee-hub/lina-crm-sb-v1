@@ -69,7 +69,9 @@ export async function enrollInWebinarSequence(
   for (const step of steps) {
     const sendAt = new Date(webinarAt);
     sendAt.setUTCDate(sendAt.getUTCDate() - step.days_before);
-    sendAt.setUTCHours(step.send_hour ?? 9, 0, 0, 0);
+    const hour = Math.floor(step.send_hour ?? 9);
+    const minute = Math.round(((step.send_hour ?? 9) % 1) * 100);
+    sendAt.setUTCHours(hour, minute, 0, 0);
 
     const status = sendAt > now ? 'pending' : 'skipped';
 
