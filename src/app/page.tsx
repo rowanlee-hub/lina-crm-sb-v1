@@ -162,6 +162,49 @@ const SheetRow = React.memo(function SheetRow({ contact, idx, editingCell, setEd
   );
 });
 
+function ClaudePixelMascot() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const size = 28;
+    let x = Math.random() * (window.innerWidth - size);
+    let y = Math.random() * (window.innerHeight - size);
+    let dx = (1.2 + Math.random() * 0.8) * (Math.random() > 0.5 ? 1 : -1);
+    let dy = (1.2 + Math.random() * 0.8) * (Math.random() > 0.5 ? 1 : -1);
+    let rotation = 0;
+    let frame: number;
+    const animate = () => {
+      x += dx; y += dy; rotation += 1.5;
+      if (x <= 0 || x >= window.innerWidth - size) { dx = -dx; x = Math.max(0, Math.min(x, window.innerWidth - size)); }
+      if (y <= 0 || y >= window.innerHeight - size) { dy = -dy; y = Math.max(0, Math.min(y, window.innerHeight - size)); }
+      el.style.transform = `translate(${x}px, ${y}px) rotate(${rotation}deg)`;
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  // Claude Code pixel sparkle logo — 7x7 grid
+  const p = [
+    '...X...',
+    '...X...',
+    '.X.X.X.',
+    'XXXXXXX',
+    '.X.X.X.',
+    '...X...',
+    '...X...',
+  ];
+  return (
+    <div ref={ref} style={{ position: 'fixed', top: 0, left: 0, pointerEvents: 'none', zIndex: 9999, width: 28, height: 28 }}>
+      <svg width="28" height="28" viewBox="0 0 7 7" shapeRendering="crispEdges">
+        {p.map((row, y) => row.split('').map((c, x) =>
+          c === 'X' ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="#E8825A" /> : null
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 function CRMDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1076,87 +1119,8 @@ function CRMDashboard() {
         )}
       </section>
 
-      {/* Claude Mascot */}
-      <style>{`
-        @keyframes claude-walk {
-          0% { left: -60px; }
-          100% { left: calc(100% + 60px); }
-        }
-        @keyframes claude-bounce {
-          0%, 100% { transform: translateY(0) scaleX(1); }
-          15% { transform: translateY(-12px) scaleX(1); }
-          30% { transform: translateY(0) scaleX(1); }
-          35% { transform: translateY(-2px) scaleX(1.05) scaleY(0.95); }
-          40% { transform: translateY(0) scaleX(1); }
-        }
-        @keyframes claude-shadow {
-          0%, 100% { transform: scaleX(1); opacity: 0.15; }
-          15% { transform: scaleX(0.7); opacity: 0.08; }
-          30% { transform: scaleX(1); opacity: 0.15; }
-        }
-        @keyframes claude-blink {
-          0%, 90%, 100% { transform: scaleY(1); }
-          95% { transform: scaleY(0.1); }
-        }
-        @keyframes claude-sparkle {
-          0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
-          50% { opacity: 1; transform: scale(1) rotate(180deg); }
-        }
-      `}</style>
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, height: '50px',
-        pointerEvents: 'none', zIndex: 9999, overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute', bottom: '8px',
-          animation: 'claude-walk 18s linear infinite',
-        }}>
-          {/* Shadow */}
-          <div style={{
-            position: 'absolute', bottom: '-2px', left: '50%', marginLeft: '-12px',
-            width: '24px', height: '6px', borderRadius: '50%', background: '#94a3b8',
-            animation: 'claude-shadow 0.6s ease-in-out infinite',
-          }} />
-          {/* Body */}
-          <div style={{ animation: 'claude-bounce 0.6s ease-in-out infinite', position: 'relative' }}>
-            {/* Sparkle trail */}
-            <div style={{ position: 'absolute', top: '-8px', left: '-10px', fontSize: '8px', animation: 'claude-sparkle 1.2s ease-in-out infinite' }}>✦</div>
-            <div style={{ position: 'absolute', top: '-4px', left: '-18px', fontSize: '6px', animation: 'claude-sparkle 1.2s ease-in-out 0.4s infinite' }}>✦</div>
-            <div style={{ position: 'absolute', top: '2px', left: '-14px', fontSize: '5px', animation: 'claude-sparkle 1.2s ease-in-out 0.8s infinite' }}>✦</div>
-            {/* Main body - Claude orange blob */}
-            <svg width="36" height="32" viewBox="0 0 36 32">
-              {/* Body */}
-              <ellipse cx="18" cy="18" rx="14" ry="12" fill="#E8825A" />
-              {/* Belly */}
-              <ellipse cx="18" cy="21" rx="9" ry="7" fill="#F4A882" />
-              {/* Left eye */}
-              <g style={{ animation: 'claude-blink 3s ease-in-out infinite' }}>
-                <ellipse cx="13" cy="15" rx="2.5" ry="3" fill="white" />
-                <circle cx="13.8" cy="15" r="1.5" fill="#1e2330" />
-                <circle cx="14.3" cy="14" r="0.6" fill="white" />
-              </g>
-              {/* Right eye */}
-              <g style={{ animation: 'claude-blink 3s ease-in-out infinite' }}>
-                <ellipse cx="23" cy="15" rx="2.5" ry="3" fill="white" />
-                <circle cx="23.8" cy="15" r="1.5" fill="#1e2330" />
-                <circle cx="24.3" cy="14" r="0.6" fill="white" />
-              </g>
-              {/* Smile */}
-              <path d="M15 20 Q18 23 21 20" stroke="#c44d2b" strokeWidth="1.2" fill="none" strokeLinecap="round" />
-              {/* Left cheek blush */}
-              <ellipse cx="10" cy="19" rx="2.5" ry="1.5" fill="#e8957a" opacity="0.6" />
-              {/* Right cheek blush */}
-              <ellipse cx="26" cy="19" rx="2.5" ry="1.5" fill="#e8957a" opacity="0.6" />
-              {/* Left foot */}
-              <ellipse cx="13" cy="29" rx="4" ry="2.5" fill="#c44d2b" />
-              {/* Right foot */}
-              <ellipse cx="23" cy="29" rx="4" ry="2.5" fill="#c44d2b" />
-              {/* Claude sparkle on head */}
-              <path d="M18 4 L19 7 L22 8 L19 9 L18 12 L17 9 L14 8 L17 7 Z" fill="#F4A882" />
-            </svg>
-          </div>
-        </div>
-      </div>
+      {/* Claude Code Pixel Mascot - bouncing randomly */}
+      <ClaudePixelMascot />
 
     </div>
   );
