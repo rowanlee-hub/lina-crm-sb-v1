@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     .from('webinar_scheduled_messages')
     .select(`
       id, contact_id, scheduled_at,
-      webinar_sequence_steps(message, days_before),
+      webinar_sequence_steps(message, message_no_link, days_before),
       contacts(line_id, name, webinar_link, webinar_date)
     `)
     .eq('contact_id', contactId)
@@ -46,8 +46,6 @@ export async function GET(req: Request) {
   const now = new Date().toISOString();
 
   // Email prompt for contacts without webinar_link (Message B)
-  const { data: emailPromptSetting } = await supabase.from('settings').select('value').eq('key', 'webinar_email_prompt').single();
-  const EMAIL_PROMPT = '\n\n---\n' + (emailPromptSetting?.value || '請發送你的電郵給我們，讓我們發送你的專屬直播連結 🔗\nPlease send us your email so we can send you your unique webinar link.');
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
@@ -60,13 +58,9 @@ export async function GET(req: Request) {
       continue;
     }
 
-    // Render message with variables
-    let rendered = await renderMessage(step.message, contact);
-
-    // Message B: append email prompt if no webinar_link
-    if (!contact.webinar_link) {
-      rendered += EMAIL_PROMPT;
-    }
+    // Use message_no_link for contacts without webinar_link, fall back to main message
+    const rawMessage = (!contact.webinar_link && step.message_no_link) ? step.message_no_link : step.message;
+    const rendered = await renderMessage(rawMessage, contact);
 
     // Send via LINE
     const lineMessages = buildLineMessages(rendered);

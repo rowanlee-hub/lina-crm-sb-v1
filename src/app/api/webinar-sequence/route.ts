@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const { data: sequence } = await supabase
       .from('webinar_sequences')
-      .select('id, name, is_active, webinar_sequence_steps(id, days_before, send_hour, message)')
+      .select('id, name, is_active, webinar_sequence_steps(id, days_before, send_hour, message, message_no_link)')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -42,13 +42,13 @@ export async function GET() {
 // POST — add a step to the active sequence
 export async function POST(req: Request) {
   try {
-    const { sequence_id, days_before, send_hour, message } = await req.json();
+    const { sequence_id, days_before, send_hour, message, message_no_link } = await req.json();
     if (!sequence_id || days_before === undefined || !message) {
       return NextResponse.json({ success: false, error: 'sequence_id, days_before, message required' }, { status: 400 });
     }
     const { data, error } = await supabase
       .from('webinar_sequence_steps')
-      .insert({ sequence_id, days_before: Number(days_before), send_hour: Number(send_hour ?? 9), message })
+      .insert({ sequence_id, days_before: Number(days_before), send_hour: Number(send_hour ?? 9), message, message_no_link: message_no_link || null })
       .select()
       .single();
     if (error) throw error;
@@ -61,11 +61,11 @@ export async function POST(req: Request) {
 // PATCH — update a step
 export async function PATCH(req: Request) {
   try {
-    const { id, days_before, send_hour, message } = await req.json();
+    const { id, days_before, send_hour, message, message_no_link } = await req.json();
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 });
     const { error } = await supabase
       .from('webinar_sequence_steps')
-      .update({ days_before: Number(days_before), send_hour: Number(send_hour), message })
+      .update({ days_before: Number(days_before), send_hour: Number(send_hour), message, message_no_link: message_no_link || null })
       .eq('id', id);
     if (error) throw error;
     return NextResponse.json({ success: true });

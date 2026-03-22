@@ -2711,6 +2711,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
   const [wbDaysBefore, setWbDaysBefore] = useState(6);
   const [wbSendHour, setWbSendHour] = useState(9);
   const [wbMessage, setWbMessage] = useState('');
+  const [wbMessageNoLink, setWbMessageNoLink] = useState('');
   const [wbBlocks, setWbBlocks] = useState<Array<{ type: 'text' | 'image' | 'video'; content: string }>>([{ type: 'text', content: '' }]);
 
   // Convert blocks array → single message string for storage
@@ -3338,7 +3339,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                   <h3 className="font-bold text-slate-800">Reminder Steps</h3>
                   <p className="text-xs text-slate-400 mt-0.5">Messages sent based on days before the webinar. Supports: {'{{name}}'}, {'{{webinar_date}}'}, {'{{webinar_link}}'}</p>
                 </div>
-                <button onClick={() => { setWbStepForm(true); setWbEditingStep(null); setWbDaysBefore(6); setWbSendHour(9); setWbMessage(''); setWbBlocks([{ type: 'text', content: '' }]); }}
+                <button onClick={() => { setWbStepForm(true); setWbEditingStep(null); setWbDaysBefore(6); setWbSendHour(9); setWbMessage(''); setWbMessageNoLink(''); setWbBlocks([{ type: 'text', content: '' }]); }}
                   className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">
                   <Plus className="w-4 h-4" /><span>Add Step</span>
                 </button>
@@ -3456,6 +3457,22 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                         <Plus className="w-3.5 h-3.5" /><span>Add Block</span>
                       </button>
                     )}
+                    {/* No-Link Message (Message B) */}
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <label className="text-xs text-slate-500 font-medium flex items-center gap-2">
+                        Message for contacts WITHOUT webinar link
+                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">No Link</span>
+                      </label>
+                      <p className="text-[10px] text-slate-400 mb-2">If empty, contacts without a link will receive the same message as above.</p>
+                      <textarea
+                        value={wbMessageNoLink}
+                        onChange={e => setWbMessageNoLink(e.target.value)}
+                        rows={4}
+                        className="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-amber-400 outline-none bg-amber-50/30"
+                        placeholder="e.g. Same reminder but asking for their email..."
+                      />
+                    </div>
+
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <span className="text-[10px] text-slate-400 mr-1">Variables (click to copy):</span>
                       {['{{name}}','{{webinar_link}}','{{webinar_date}}','{{email}}','{{phone}}','{{status}}','{{tags}}','{{notes}}','{{uid}}','{{follow_up_note}}'].map(v => (
@@ -3504,9 +3521,9 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
 
                         const res = wbEditingStep
                           ? await fetch('/api/webinar-sequence', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ id: wbEditingStep.id, days_before: wbDaysBefore, send_hour: wbSendHour, message: wbMessage }) })
+                              body: JSON.stringify({ id: wbEditingStep.id, days_before: wbDaysBefore, send_hour: wbSendHour, message: wbMessage, message_no_link: wbMessageNoLink }) })
                           : await fetch('/api/webinar-sequence', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ sequence_id: seqId, days_before: wbDaysBefore, send_hour: wbSendHour, message: wbMessage }) });
+                              body: JSON.stringify({ sequence_id: seqId, days_before: wbDaysBefore, send_hour: wbSendHour, message: wbMessage, message_no_link: wbMessageNoLink }) });
                         const data = await res.json();
                         if (!res.ok || data.success === false) { alert(`Save failed: ${data.error || res.statusText}`); setWbSaving(false); return; }
                         setWbStepForm(false); setWbEditingStep(null);
@@ -3534,6 +3551,10 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                         <p className="text-xs text-slate-400">{step.send_hour}:00</p>
                       </div>
                       <div className="flex-1 space-y-1.5">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Has Link</span>
+                          {step.message_no_link && <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">No Link</span>}
+                        </div>
                         {messageToBlocks(step.message).map((blk: { type: string; content: string }, bi: number) => (
                           <div key={bi}>
                             {blk.type === 'text' ? (
@@ -3574,7 +3595,7 @@ function AutomationsView({ initialSub }: { initialSub?: string }) {
                         >
                           {wbTestingStepId === step.id ? '…' : 'Test'}
                         </button>
-                        <button onClick={() => { setWbEditingStep(step); setWbDaysBefore(step.days_before); setWbSendHour(step.send_hour); setWbMessage(step.message); setWbBlocks(messageToBlocks(step.message)); setWbStepForm(true); }}
+                        <button onClick={() => { setWbEditingStep(step); setWbDaysBefore(step.days_before); setWbSendHour(step.send_hour); setWbMessage(step.message); setWbMessageNoLink(step.message_no_link || ''); setWbBlocks(messageToBlocks(step.message)); setWbStepForm(true); }}
                           className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit step">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
