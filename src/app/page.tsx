@@ -4087,7 +4087,7 @@ function LineMatchView() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">
-                <span className="font-bold text-blue-600">{lineOnly.length}</span> LINE-only · <span className="font-bold text-amber-600">{emailOnly.length}</span> Email-only
+                <span className="font-bold text-amber-600">{emailOnly.length}</span> Email-only (no LINE) · <span className="font-bold text-blue-600">{lineOnly.length}</span> LINE-only (no email)
               </p>
               <button onClick={fetchUnmatched} disabled={mergeLoading}
                 className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50">
@@ -4095,80 +4095,90 @@ function LineMatchView() {
               </button>
             </div>
 
-            {lineOnly.length === 0 && !mergeLoading ? (
+            {/* Search bar */}
+            <div className="bg-white border border-slate-200 rounded-xl p-3">
+              <input
+                type="text"
+                value={emailSearch}
+                onChange={e => setEmailSearch(e.target.value)}
+                placeholder="Search by email or name..."
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+              />
+            </div>
+
+            {emailOnly.length === 0 && lineOnly.length === 0 && !mergeLoading ? (
               <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
-                <p className="text-sm text-slate-400">No unmatched LINE contacts found. All contacts are linked!</p>
+                <p className="text-sm text-slate-400">No unmatched contacts found. All contacts are linked!</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {lineOnly.map(lc => (
-                  <div key={lc.id} className={`bg-white border rounded-xl overflow-hidden transition-all ${selectedLine?.id === lc.id ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+                {emailOnly
+                  .filter(ec => {
+                    if (!emailSearch.trim()) return true;
+                    const q = emailSearch.toLowerCase();
+                    return (ec.name || '').toLowerCase().includes(q) || (ec.email || '').toLowerCase().includes(q);
+                  })
+                  .map(ec => (
+                  <div key={ec.id} className={`bg-white border rounded-xl overflow-hidden transition-all ${selectedLine?.id === ec.id ? 'border-amber-300 ring-2 ring-amber-100' : 'border-slate-200'}`}>
                     <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50"
-                      onClick={() => { setSelectedLine(selectedLine?.id === lc.id ? null : lc); setEmailSearch(''); }}>
+                      onClick={() => setSelectedLine(selectedLine?.id === ec.id ? null : ec)}>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
-                          {(lc.name || '?')[0].toUpperCase()}
+                        <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 font-bold text-sm">
+                          {(ec.name || '?')[0].toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-800">{lc.name || 'No Name'}</p>
-                          <p className="text-[10px] text-slate-400 font-mono">{lc.line_id}</p>
+                          <p className="text-sm font-semibold text-slate-800">{ec.name || 'No Name'}</p>
+                          <p className="text-xs text-slate-400">{ec.email}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {lc.tags?.includes('pending-match') && (
-                          <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">pending-match</span>
-                        )}
-                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${selectedLine?.id === lc.id ? 'rotate-180' : ''}`} />
+                        {ec.webinar_date && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">webinar</span>}
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${selectedLine?.id === ec.id ? 'rotate-180' : ''}`} />
                       </div>
                     </div>
 
-                    {selectedLine?.id === lc.id && (
-                      <div className="border-t border-blue-200 p-3 bg-blue-50/30 space-y-3">
-                        <div>
-                          <label className="text-xs text-slate-500 font-medium">Search email contact to merge with:</label>
-                          <input
-                            type="text"
-                            value={emailSearch}
-                            onChange={e => setEmailSearch(e.target.value)}
-                            placeholder="Type name or email to filter..."
-                            className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
-                          />
-                        </div>
-                        <div className="max-h-[200px] overflow-y-auto space-y-1">
-                          {emailOnly
-                            .filter(ec => {
-                              if (!emailSearch.trim()) return true;
-                              const q = emailSearch.toLowerCase();
-                              return (ec.name || '').toLowerCase().includes(q) || (ec.email || '').toLowerCase().includes(q);
-                            })
-                            .map(ec => (
-                              <div key={ec.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20">
-                                <div>
-                                  <p className="text-sm font-semibold text-slate-700">{ec.name || 'No Name'}</p>
-                                  <p className="text-xs text-slate-400">{ec.email} {ec.phone ? `· ${ec.phone}` : ''}</p>
+                    {selectedLine?.id === ec.id && (
+                      <div className="border-t border-amber-200 p-3 bg-amber-50/30 space-y-3">
+                        <p className="text-xs text-slate-500 font-medium">Select the matching LINE contact:</p>
+                        <div className="max-h-[250px] overflow-y-auto space-y-1">
+                          {lineOnly.map(lc => (
+                            <div key={lc.id} className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">
+                                  {(lc.name || '?')[0].toUpperCase()}
                                 </div>
-                                <button
-                                  onClick={() => handleMerge(lc.id, ec.id)}
-                                  disabled={merging === lc.id}
-                                  className="px-3 py-1 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                  {merging === lc.id ? '…' : 'Merge'}
-                                </button>
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-700">{lc.name || 'No Name'}</p>
+                                  <p className="text-[10px] text-slate-400 font-mono">{lc.line_id.substring(0, 12)}…</p>
+                                </div>
                               </div>
-                            ))
-                          }
-                          {emailOnly.filter(ec => {
-                            if (!emailSearch.trim()) return true;
-                            const q = emailSearch.toLowerCase();
-                            return (ec.name || '').toLowerCase().includes(q) || (ec.email || '').toLowerCase().includes(q);
-                          }).length === 0 && (
-                            <p className="text-xs text-slate-400 text-center py-2">No matching email contacts found.</p>
+                              <button
+                                onClick={() => handleMerge(lc.id, ec.id)}
+                                disabled={merging !== null}
+                                className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {merging === lc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <GitMerge className="w-3 h-3" />}
+                                {merging === lc.id ? 'Merging…' : 'Merge'}
+                              </button>
+                            </div>
+                          ))}
+                          {lineOnly.length === 0 && (
+                            <p className="text-xs text-slate-400 text-center py-2">No LINE-only contacts to match with.</p>
                           )}
                         </div>
                       </div>
                     )}
                   </div>
                 ))}
+                {emailOnly.filter(ec => {
+                  if (!emailSearch.trim()) return true;
+                  const q = emailSearch.toLowerCase();
+                  return (ec.name || '').toLowerCase().includes(q) || (ec.email || '').toLowerCase().includes(q);
+                }).length === 0 && (
+                  <div className="bg-white border border-slate-200 rounded-xl p-6 text-center">
+                    <p className="text-sm text-slate-400">No email contacts match your search.</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
