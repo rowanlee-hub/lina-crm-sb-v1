@@ -43,19 +43,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, enrolled: 0, message: `No contacts found with tag ${tag} and LINE ID` });
     }
 
+    // Get the expected step count so we can detect incomplete enrollments
+    const { data: activeSeq } = await supabase
+      .from('webinar_sequences')
+      .select('id, webinar_sequence_steps(id)')
+      .eq('is_active', true)
+      .limit(1)
+      .single();
+    const expectedStepCount = activeSeq?.webinar_sequence_steps?.length || 0;
+
     // Get already-enrolled contact IDs for this webinar date
     const { data: existingEnrollments } = await supabase
       .from('webinar_enrollments')
-      .select('contact_id')
+      .select('contact_id, id')
       .eq('webinar_date', webinarDate)
       .eq('status', 'active');
 
-    const enrolledIds = new Set((existingEnrollments || []).map(e => e.contact_id));
+    const enrollmentMap = new Map((existingEnrollments || []).map(e => [e.contact_id, e.id]));
 
-    // Filter to only unenrolled contacts, limit batch size to avoid timeout
+    // Check for incomplete enrollments (timed-out previous runs)
+    const incompleteIds = new Set<string>();
+    if (body.fix_incomplete !== false && expectedStepCount > 0) {
+      for (const [contactId, enrollmentId] of enrollmentMap) {
+        const { count } = await supabase
+          .from('webinar_scheduled_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('enrollment_id', enrollmentId);
+        if ((count || 0) < expectedStepCount) {
+          incompleteIds.add(contactId);
+        }
+      }
+    }
+
+    // Filter to unenrolled OR incomplete contacts, limit batch size
     const batchSize = body.limit || 30;
-    const toEnroll = contacts.filter(c => !enrolledIds.has(c.id)).slice(0, batchSize);
-    const remaining = contacts.filter(c => !enrolledIds.has(c.id)).length - toEnroll.length;
+    const needsEnroll = contacts.filter(c => !enrollmentMap.has(c.id) || incompleteIds.has(c.id));
+    const toEnroll = needsEnroll.slice(0, batchSize);
+    const remaining = needsEnroll.length - toEnroll.length;
 
     let enrolled = 0;
     let failed = 0;
@@ -75,7 +99,8 @@ export async function POST(req: Request) {
       enrolled,
       failed,
       remaining,
-      alreadyEnrolled: enrolledIds.size,
+      alreadyEnrolled: enrollmentMap.size - incompleteIds.size,
+      fixed: incompleteIds.size,
       totalWithTag: contacts.length,
       tag,
     });
