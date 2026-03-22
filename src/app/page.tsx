@@ -2022,10 +2022,24 @@ function ConversationsView({ contacts, selectedId, onUpdateContact }: Conversati
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeContact?.history?.length, activeContact?.id]);
 
-  // Fetch reminders when active contact changes
+  // Fetch history + reminders when active contact changes
   useEffect(() => {
     if (!activeContact?.id) return;
     lastHistoryCountRef.current = activeContact?.history?.length || 0;
+
+    // Load history if not already loaded
+    if (!activeContact.history || activeContact.history.length === 0) {
+      fetch(`/api/contacts/${activeContact.id}/history`)
+        .then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            onUpdateContact({ ...activeContact, history: data });
+            lastHistoryCountRef.current = data.length;
+          }
+        })
+        .catch(() => {});
+    }
+
     setLoadingReminders(true);
     fetch(`/api/reminders?contactId=${activeContact.id}`)
       .then(r => r.json())
