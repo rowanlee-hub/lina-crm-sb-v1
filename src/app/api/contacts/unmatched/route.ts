@@ -5,9 +5,9 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/contacts/unmatched
- * Returns two lists:
- * - line_only: contacts with line_id but no email (LINE followers not matched)
- * - email_only: contacts with email but no line_id (GHL contacts not matched)
+ * Returns:
+ * - line_only: contacts with line_id but no email
+ * - email_all: ALL contacts with email, with a `linked` flag
  */
 export async function GET() {
   // LINE contacts without email
@@ -20,34 +20,23 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(1000);
 
-  // Email contacts without line_id
-  // Two queries to handle both null and empty string for line_id
-  const { data: emailNullLine } = await supabase
+  // All contacts with email
+  const { data: emailAll } = await supabase
     .from('contacts')
-    .select('id, name, email, phone, tags, webinar_date, webinar_link, ghl_contact_id')
-    .is('line_id', null)
+    .select('id, name, email, phone, line_id, tags, webinar_date, webinar_link')
     .not('email', 'is', null)
     .neq('email', '')
-    .order('created_at', { ascending: false })
+    .order('name', { ascending: true })
     .limit(1000);
 
-  const { data: emailEmptyLine } = await supabase
-    .from('contacts')
-    .select('id, name, email, phone, tags, webinar_date, webinar_link, ghl_contact_id')
-    .eq('line_id', '')
-    .not('email', 'is', null)
-    .neq('email', '')
-    .order('created_at', { ascending: false })
-    .limit(1000);
-
-  // Merge and deduplicate
-  const emailMap = new Map<string, any>();
-  for (const c of [...(emailNullLine || []), ...(emailEmptyLine || [])]) {
-    emailMap.set(c.id, c);
-  }
+  // Add linked flag
+  const emailWithFlag = (emailAll || []).map(c => ({
+    ...c,
+    linked: !!(c.line_id && c.line_id.trim()),
+  }));
 
   return NextResponse.json({
     line_only: lineOnly || [],
-    email_only: Array.from(emailMap.values()),
+    email_only: emailWithFlag,
   });
 }

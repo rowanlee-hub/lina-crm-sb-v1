@@ -4088,7 +4088,7 @@ function LineMatchView() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">
-                <span className="font-bold text-amber-600">{emailOnly.length}</span> Email-only · <span className="font-bold text-blue-600">{lineOnly.length}</span> LINE-only
+                <span className="font-bold text-amber-600">{emailOnly.filter((c:any) => !c.linked).length}</span> Unlinked · <span className="font-bold text-emerald-600">{emailOnly.filter((c:any) => c.linked).length}</span> Linked · <span className="font-bold text-blue-600">{lineOnly.length}</span> LINE-only
               </p>
               <button onClick={fetchUnmatched} disabled={mergeLoading}
                 className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50">
@@ -4121,7 +4121,7 @@ function LineMatchView() {
 
               {/* Two-column header */}
               <div className="grid grid-cols-2 text-[10px] font-bold text-slate-400 uppercase px-3 py-2 bg-slate-50 border-b border-slate-100">
-                <span>Email Contacts (No LINE)</span>
+                <span>All Email Contacts</span>
                 <span>LINE Contacts (Display Name)</span>
               </div>
 
@@ -4136,12 +4136,13 @@ function LineMatchView() {
                     })
                     .map(ec => (
                     <div key={ec.id}
-                      onClick={() => setSelectedLine(selectedLine?.id === ec.id ? null : ec)}
-                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-slate-50 transition-colors ${selectedLine?.id === ec.id ? 'bg-amber-50 border-l-2 border-l-amber-400' : 'hover:bg-slate-50'}`}>
+                      onClick={() => !ec.linked && setSelectedLine(selectedLine?.id === ec.id ? null : ec)}
+                      className={`flex items-center gap-2 px-3 py-2 border-b border-slate-50 transition-colors ${ec.linked ? 'opacity-60' : 'cursor-pointer'} ${selectedLine?.id === ec.id ? 'bg-amber-50 border-l-2 border-l-amber-400' : ec.linked ? 'bg-emerald-50/30' : 'hover:bg-slate-50'}`}>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-slate-800 truncate">{ec.name || 'No Name'}</p>
                         <p className="text-xs text-slate-400 truncate">{ec.email}</p>
                       </div>
+                      {ec.linked && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex-shrink-0">Linked</span>}
                     </div>
                   ))}
                   {emailOnly.filter(ec => {
