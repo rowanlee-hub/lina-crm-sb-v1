@@ -142,11 +142,29 @@ export async function POST(req: Request) {
         }
       }
 
-      // Auto-enroll in webinar sequence if webinar_date is new or changed
+      // Auto-enroll in webinar sequence if:
+      // 1. webinar_date is new or changed, OR
+      // 2. contact has a webinar_date + LINE ID but no active enrollment (catch-up)
       const prevWebinarDate = existingContact.webinar_date;
-      if (webinar_date && webinar_date.substring(0, 10) !== (prevWebinarDate || '').substring(0, 10)) {
-        const { enrollInWebinarSequence } = await import('@/lib/webinar-sequence');
-        enrollInWebinarSequence(existingContact.id, webinar_date, name || existingContact.name).catch(console.error);
+      const finalWebinarDate = webinar_date || existingContact.webinar_date;
+      if (finalWebinarDate) {
+        const dateChanged = webinar_date && webinar_date.substring(0, 10) !== (prevWebinarDate || '').substring(0, 10);
+        if (dateChanged) {
+          const { enrollInWebinarSequence } = await import('@/lib/webinar-sequence');
+          enrollInWebinarSequence(existingContact.id, finalWebinarDate, name || existingContact.name).catch(console.error);
+        } else if (existingContact.line_id) {
+          // Check if already enrolled — if not, enroll now (catch-up for contacts that got LINE ID after GHL import)
+          const { data: activeEnrollment } = await supabase
+            .from('webinar_enrollments')
+            .select('id')
+            .eq('contact_id', existingContact.id)
+            .eq('status', 'active')
+            .single();
+          if (!activeEnrollment) {
+            const { enrollInWebinarSequence } = await import('@/lib/webinar-sequence');
+            enrollInWebinarSequence(existingContact.id, finalWebinarDate, name || existingContact.name).catch(console.error);
+          }
+        }
       }
 
       return NextResponse.json({ success: true, action: 'updated', id: existingContact.id, debug: { name, email, phone, uid, webinar_link, webinar_date } });

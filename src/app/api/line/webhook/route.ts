@@ -186,8 +186,14 @@ export async function POST(req: Request) {
 
           // Auto-assign webinar date
           const webinarDate = getNextWebinarDate();
+          // Add webinar-MMDD tag so they show up in webinar filters
+          const wd = new Date(webinarDate);
+          const webinarTag = `webinar-${String(wd.getMonth() + 1).padStart(2, '0')}${String(wd.getDate()).padStart(2, '0')}`;
+          const followTags: string[] = contact.tags || [];
+          if (!followTags.includes(webinarTag)) followTags.push(webinarTag);
           await supabase.from('contacts').update({
             webinar_date: webinarDate,
+            tags: followTags,
             updated_at: new Date().toISOString(),
           }).eq('id', contact.id);
 
@@ -232,8 +238,13 @@ export async function POST(req: Request) {
           if (!activeEnrollment) {
             // No active enrollment — assign fresh webinar date and enroll
             const webinarDate = getNextWebinarDate();
+            const wd2 = new Date(webinarDate);
+            const refolWebinarTag = `webinar-${String(wd2.getMonth() + 1).padStart(2, '0')}${String(wd2.getDate()).padStart(2, '0')}`;
+            const refolTags2: string[] = contact.tags || [];
+            if (!refolTags2.includes(refolWebinarTag)) refolTags2.push(refolWebinarTag);
             await supabase.from('contacts').update({
               webinar_date: webinarDate,
+              tags: refolTags2,
               updated_at: new Date().toISOString(),
             }).eq('id', contact.id);
 
@@ -379,6 +390,26 @@ export async function POST(req: Request) {
           if (merged) {
             contact = merged as typeof contact;
             contactId = merged.id;
+
+            // Auto-push webinar link if the merged contact has one
+            if (merged.webinar_link) {
+              const { autoPushWebinarLink } = await import('@/lib/webinar-utils');
+              autoPushWebinarLink({ ...merged, line_id: userId }).catch(console.error);
+            }
+
+            // Auto-enroll in webinar sequence if merged contact has a date but no active enrollment
+            if (merged.webinar_date) {
+              const { data: activeEnrollment } = await supabase
+                .from('webinar_enrollments')
+                .select('id')
+                .eq('contact_id', merged.id)
+                .eq('status', 'active')
+                .single();
+              if (!activeEnrollment) {
+                const { enrollInWebinarSequence } = await import('@/lib/webinar-sequence');
+                enrollInWebinarSequence(merged.id, merged.webinar_date, merged.name || '').catch(console.error);
+              }
+            }
           } else {
             await supabase.from('contacts').update({ phone, updated_at: new Date().toISOString() }).eq('id', contactId);
           }
@@ -397,6 +428,26 @@ export async function POST(req: Request) {
               if (merged) {
                 contact = merged as typeof contact;
                 contactId = merged.id;
+
+                // Auto-push webinar link if the merged contact has one
+                if (merged.webinar_link) {
+                  const { autoPushWebinarLink } = await import('@/lib/webinar-utils');
+                  autoPushWebinarLink({ ...merged, line_id: userId }).catch(console.error);
+                }
+
+                // Auto-enroll in webinar sequence after UID merge
+                if (merged.webinar_date) {
+                  const { data: activeEnrollment } = await supabase
+                    .from('webinar_enrollments')
+                    .select('id')
+                    .eq('contact_id', merged.id)
+                    .eq('status', 'active')
+                    .single();
+                  if (!activeEnrollment) {
+                    const { enrollInWebinarSequence } = await import('@/lib/webinar-sequence');
+                    enrollInWebinarSequence(merged.id, merged.webinar_date, merged.name || '').catch(console.error);
+                  }
+                }
               }
             }
           }

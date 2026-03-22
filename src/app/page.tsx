@@ -2454,22 +2454,58 @@ interface Step {
 interface Automation { id: string; name: string; trigger_type: string; trigger_value: string; action_type: string; action_value: string; is_active: boolean; }
 
 function DashboardBar() {
-  const [info, setInfo] = useState<{ activeDate: string; enrollCount: number; pendingCount: number } | null>(null);
-  useEffect(() => {
+  const [info, setInfo] = useState<{ activeDate: string; enrollCount: number; pendingCount: number; missingCount: number } | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrollResult, setEnrollResult] = useState<string | null>(null);
+
+  const loadDashboard = () => {
     Promise.all([
       fetch('/api/settings?key=active_webinar_date').then(r => r.json()).catch(() => ({})),
       fetch('/api/webinar-sequence/enrollments').then(r => r.json()).catch(() => []),
     ]).then(([setting, enrollments]) => {
       const activeDate = setting?.value || '';
       const activeEnrollments = Array.isArray(enrollments) ? enrollments.filter((e: any) => e.status === 'active') : [];
-      // Count pending messages across all enrollments
-      setInfo({ activeDate, enrollCount: activeEnrollments.length, pendingCount: 0 });
+      setInfo({ activeDate, enrollCount: activeEnrollments.length, pendingCount: 0, missingCount: 0 });
       // Fetch pending message count
       fetch('/api/webinar-sequence/messages?status=pending').then(r => r.json()).then(msgs => {
         setInfo(prev => prev ? { ...prev, pendingCount: Array.isArray(msgs) ? msgs.length : 0 } : prev);
       }).catch(() => {});
+      // Check how many contacts have the tag + LINE ID but aren't enrolled
+      if (activeDate) {
+        fetch(`/api/webinar-sequence/enroll/bulk/stats?webinar_date=${encodeURIComponent(activeDate)}`).then(r => r.json()).then(data => {
+          if (data.missing !== undefined) {
+            setInfo(prev => prev ? { ...prev, missingCount: data.missing } : prev);
+          }
+        }).catch(() => {});
+      }
     });
-  }, []);
+  };
+
+  useEffect(() => { loadDashboard(); }, []);
+
+  const handleBulkEnroll = async () => {
+    if (!info?.activeDate || enrolling) return;
+    setEnrolling(true);
+    setEnrollResult(null);
+    try {
+      const res = await fetch('/api/webinar-sequence/enroll/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webinar_date: info.activeDate }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEnrollResult(`Enrolled ${data.enrolled} contacts${data.failed ? `, ${data.failed} failed` : ''}`);
+        loadDashboard();
+      } else {
+        setEnrollResult(`Error: ${data.error}`);
+      }
+    } catch {
+      setEnrollResult('Network error');
+    } finally {
+      setEnrolling(false);
+    }
+  };
 
   if (!info) return null;
 
@@ -2502,6 +2538,30 @@ function DashboardBar() {
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pending Messages</p>
           <p className="text-sm font-bold text-emerald-600">{info.pendingCount}</p>
         </div>
+        {info.missingCount > 0 && (
+          <>
+            <div className="h-8 w-px bg-slate-200" />
+            <div className="flex items-center gap-2">
+              <div>
+                <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Not Enrolled</p>
+                <p className="text-sm font-bold text-amber-600">{info.missingCount} contacts</p>
+              </div>
+              <button
+                onClick={handleBulkEnroll}
+                disabled={enrolling}
+                className="px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {enrolling ? 'Enrolling...' : 'Enroll All'}
+              </button>
+            </div>
+          </>
+        )}
+        {enrollResult && (
+          <>
+            <div className="h-8 w-px bg-slate-200" />
+            <p className="text-xs text-slate-600">{enrollResult}</p>
+          </>
+        )}
       </div>
     </div>
   );
