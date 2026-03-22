@@ -62,26 +62,29 @@ export async function GET(req: Request) {
     }
 
     const contactIds = contacts.map(c => c.id);
+    const skipHistory = searchParams.get('skip_history') === 'true' || !!search;
 
-    // Batch history fetch to avoid Supabase URL length limits with large .in() arrays
-    const BATCH_SIZE = 100;
     let history: any[] = [];
-    for (let i = 0; i < contactIds.length; i += BATCH_SIZE) {
-      const batch = contactIds.slice(i, i + BATCH_SIZE);
-      const { data: batchHistory, error: historyError } = await supabase
-        .from('contact_history')
-        .select('*')
-        .in('contact_id', batch)
-        .order('created_at', { ascending: false });
+    if (!skipHistory) {
+      // Batch history fetch to avoid Supabase URL length limits with large .in() arrays
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < contactIds.length; i += BATCH_SIZE) {
+        const batch = contactIds.slice(i, i + BATCH_SIZE);
+        const { data: batchHistory, error: historyError } = await supabase
+          .from('contact_history')
+          .select('*')
+          .in('contact_id', batch)
+          .order('created_at', { ascending: false });
 
-      if (historyError) {
-        return NextResponse.json({ success: false, error: historyError.message }, { status: 500 });
+        if (historyError) {
+          return NextResponse.json({ success: false, error: historyError.message }, { status: 500 });
+        }
+        if (batchHistory) history = history.concat(batchHistory);
       }
-      if (batchHistory) history = history.concat(batchHistory);
     }
 
     const formattedContacts = contacts.map(c => {
-      const contactHistory = history
+      const contactHistory = skipHistory ? [] : history
         .filter(h => h.contact_id === c.id)
         .map(h => ({ id: h.id, date: h.created_at, action: h.action }));
 
