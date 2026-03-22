@@ -163,8 +163,8 @@ export async function POST(req: Request) {
         if (emailMatch) {
           // Merge: move LINE id + tags onto the GHL contact, delete this one
           let mergedTags = [...new Set([...(emailMatch.tags || []), ...(existing?.tags || [])])];
-          // Remove "Pending Match" tag since we've now matched
-          mergedTags = mergedTags.filter(t => t !== 'Pending Match');
+          // Remove "pending-match" tag since we've now matched
+          mergedTags = mergedTags.filter(t => t !== 'pending-match');
           await supabase.from('contacts').update({
             line_id: existing.line_id,
             tags: mergedTags,

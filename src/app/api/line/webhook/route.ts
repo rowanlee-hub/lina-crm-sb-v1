@@ -173,7 +173,7 @@ export async function POST(req: Request) {
       // Ensure user exists in Supabase
       if (event.type === 'follow') {
         console.log(`User ${userId} followed the account.`);
-        const result = await getOrCreateLineContact(userId, ['Followed']);
+        const result = await getOrCreateLineContact(userId, ['followed']);
         if (!result) continue;
         const { contact, isNew } = result;
 
@@ -329,17 +329,17 @@ export async function POST(req: Request) {
           } else {
             await supabase.from('contacts').update({ email, updated_at: new Date().toISOString() }).eq('id', contactId);
 
-            // Tag "Pending Match" so user can find unmatched contacts
+            // Tag "pending-match" so user can find unmatched contacts
             const currentContactTags: string[] = contact.tags || [];
-            if (!currentContactTags.includes('Pending Match')) {
-              const updatedTags = [...currentContactTags, 'Pending Match'];
+            if (!currentContactTags.includes('pending-match')) {
+              const updatedTags = [...currentContactTags, 'pending-match'];
               await supabase.from('contacts').update({ tags: updatedTags }).eq('id', contactId);
               contact.tags = updatedTags;
               await supabase.from('contact_history').insert({
                 contact_id: contactId,
-                action: `Tag Added [Auto]: Pending Match — email ${email} not found in GHL contacts`,
+                action: `Tag Added [Auto]: pending-match — email ${email} not found in GHL contacts`,
               });
-              console.log(`[Webhook] Tagged "Pending Match" for ${userId} — email ${email} has no GHL match`);
+              console.log(`[Webhook] Tagged "pending-match" for ${userId} — email ${email} has no GHL match`);
             }
           }
         } else if (phoneMatch) {

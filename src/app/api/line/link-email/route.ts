@@ -166,7 +166,7 @@ export async function POST(req: Request) {
         email: emailLower,
         line_id,
         webinar_date: webinarDate,
-        tags: ['Followed'],
+        tags: ['followed'],
         status: 'Lead',
       }).select().single();
 
