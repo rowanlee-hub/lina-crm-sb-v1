@@ -115,7 +115,10 @@ async function tryMergeByField(
   });
 
   console.log(`[Webhook] Merged LINE user ${lineUserId} into contact ${existing.id} via ${field}`);
-  return { ...existing, line_id: lineUserId, tags: mergedTags };
+
+  // Re-fetch the contact to get the latest data (GHL webhook may have updated it concurrently)
+  const { data: fresh } = await supabase.from('contacts').select('*').eq('id', existing.id).single();
+  return fresh ? { ...fresh, line_id: lineUserId } : { ...existing, line_id: lineUserId, tags: mergedTags };
 }
 
 export async function POST(req: Request) {
