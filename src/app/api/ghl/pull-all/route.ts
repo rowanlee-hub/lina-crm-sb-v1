@@ -58,7 +58,9 @@ async function upsertContact(c: any): Promise<'created' | 'updated' | 'skipped'>
   const phone = (c.phone || '').replace(/[\s\-()]/g, '');
   const uid = c.customFields?.find((f: any) => f.key === 'uid' || f.id === 'uid')?.value || '';
   const rawTags: string[] = Array.isArray(c.tags) ? c.tags : [];
-  const tags = rawTags.flatMap((t: string) => t.split(',').map((s: string) => s.trim())).filter(Boolean);
+  let tags = rawTags.flatMap((t: string) => t.split(',').map((s: string) => s.trim())).filter(Boolean);
+  // Normalise webinar tags: webinar0325 → webinar-0325
+  tags = tags.map(t => t.replace(/^webinar(\d{4})$/, 'webinar-$1'));
 
   // Determine webinar date from webinar-MMDD tags (pick latest)
   const year = new Date().getFullYear();
@@ -95,6 +97,13 @@ async function upsertContact(c: any): Promise<'created' | 'updated' | 'skipped'>
 
   const now = new Date().toISOString();
   const dayOfWeek = new Date().getDay();
+
+  // Auto-register all tags in tag_definitions
+  if (tags.length > 0) {
+    for (const tag of tags) {
+      await supabase.from('tag_definitions').upsert({ name: tag }, { onConflict: 'name' });
+    }
+  }
 
   if (existing) {
     const mergedTags = [...new Set([...(existing.tags || []), ...tags])];

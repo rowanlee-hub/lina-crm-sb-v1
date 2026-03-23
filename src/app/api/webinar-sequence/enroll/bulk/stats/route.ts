@@ -12,10 +12,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ missing: 0 });
   }
 
-  const d = new Date(webinarDate);
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const tag = `webinar-${mm}${dd}`;
+  // Use substring to avoid timezone shift (new Date() can shift date back by 1 day)
+  const tag = `webinar-${webinarDate.substring(5, 7)}${webinarDate.substring(8, 10)}`;
 
   // Get expected step count
   const { data: activeSeq } = await supabase

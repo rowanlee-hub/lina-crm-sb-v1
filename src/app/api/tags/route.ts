@@ -4,15 +4,46 @@ import { supabase } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// GET — all tag definitions
+// GET — all tags (from tag_definitions + any unregistered tags on contacts)
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    // Fetch registered tag definitions
+    const { data: tagDefs } = await supabase
       .from('tag_definitions')
       .select('*')
       .order('name', { ascending: true });
-    if (error) throw error;
-    return NextResponse.json(data || []);
+
+    // Collect all unique tags from contacts
+    const { data: contacts } = await supabase
+      .from('contacts')
+      .select('tags');
+
+    const tagMap = new Map<string, { name: string; colour: string }>();
+
+    // Start with registered tags
+    for (const t of tagDefs || []) {
+      tagMap.set(t.name, { name: t.name, colour: t.colour || '#3B82F6' });
+    }
+
+    // Add any tags from contacts that aren't registered yet
+    const unregistered: string[] = [];
+    for (const c of contacts || []) {
+      for (const tag of (c.tags as string[]) || []) {
+        if (tag && !tagMap.has(tag)) {
+          tagMap.set(tag, { name: tag, colour: '#3B82F6' });
+          unregistered.push(tag);
+        }
+      }
+    }
+
+    // Best-effort auto-register missing tags (don't fail if this errors)
+    for (const tag of unregistered) {
+      try { await supabase.from('tag_definitions').upsert({ name: tag }, { onConflict: 'name' }); } catch {}
+    }
+
+    // Return sorted list
+    const result = Array.from(tagMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    return NextResponse.json(result);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Error fetching tags';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

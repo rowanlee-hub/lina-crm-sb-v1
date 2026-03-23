@@ -37,6 +37,8 @@ export async function POST(req: Request) {
     } else if (typeof rawTags === 'string' && rawTags.trim()) {
       tags = rawTags.split(',').map((s: string) => s.trim()).filter(Boolean);
     }
+    // Normalise webinar tags: webinar0325 → webinar-0325
+    tags = tags.map(t => t.replace(/^webinar(\d{4})$/, 'webinar-$1'));
     console.log(`GHL Webhook [${email || ghlId}] rawTags:`, JSON.stringify(rawTags), '→ parsed:', JSON.stringify(tags));
 
     // Determine webinar date:
@@ -133,9 +135,12 @@ export async function POST(req: Request) {
         }).catch(console.error);
       }
 
-      // Trigger automations for new tags
+      // Auto-register new tags in tag_definitions + trigger automations
       const newTags = (tags || []).filter((t: string) => !(existingContact.tags || []).includes(t));
       if (newTags.length > 0) {
+        for (const tag of newTags) {
+          await supabase.from('tag_definitions').upsert({ name: tag }, { onConflict: 'name' });
+        }
         const { processAutomations } = await import('@/lib/automation-engine');
         for (const tag of newTags) {
           processAutomations('TAG_ADDED', tag, existingContact.id, existingContact.line_id || '');
@@ -185,6 +190,13 @@ export async function POST(req: Request) {
       }).select().single();
 
       if (error) throw error;
+
+      // Auto-register all tags in tag_definitions
+      if (tags && tags.length > 0) {
+        for (const tag of tags) {
+          await supabase.from('tag_definitions').upsert({ name: tag }, { onConflict: 'name' });
+        }
+      }
 
       await supabase.from('contact_history').insert({
         contact_id: newContact.id,

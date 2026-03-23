@@ -116,7 +116,7 @@ export async function GET(req: Request) {
       const email = ghl.email || '';
       const phone = ghl.phone || '';
       const name = ghl.contactName || `${ghl.firstName || ''} ${ghl.lastName || ''}`.trim() || '';
-      const tags: string[] = ghl.tags || [];
+      const tags: string[] = (ghl.tags || []).map((t: string) => t.replace(/^webinar(\d{4})$/, 'webinar-$1'));
       const customFields = ghl.customFields || [];
 
       const webinarLink = getCustomField(customFields, FIELD_WEBINAR_LINK);
