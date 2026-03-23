@@ -221,10 +221,45 @@ export async function GET() {
       }
     }
 
+    // ─── PART 6: Catch-up — Webinar Link + Workbook Push ───────
+    // Safety net: find contacts that have webinar_link + line_id
+    // but never received the auto-push (missed due to race conditions).
+    let linkPushed = 0;
+    {
+      const { data: candidates } = await supabase
+        .from('contacts')
+        .select('id, name, email, phone, line_id, webinar_link, webinar_date, tags, status, notes, uid, follow_up_note')
+        .not('line_id', 'is', null)
+        .neq('line_id', '')
+        .not('webinar_link', 'is', null)
+        .neq('webinar_link', '');
+
+      if (candidates && candidates.length > 0) {
+        // Check which ones never had the link sent
+        for (const contact of candidates) {
+          const { data: history } = await supabase
+            .from('contact_history')
+            .select('id')
+            .eq('contact_id', contact.id)
+            .like('action', '%Webinar link + workbook sent%')
+            .limit(1);
+
+          if (!history || history.length === 0) {
+            // Never sent — send now
+            const { autoPushWebinarLink } = await import('@/lib/webinar-utils');
+            const ok = await autoPushWebinarLink(contact);
+            if (ok) linkPushed++;
+          }
+        }
+      }
+      if (linkPushed > 0) console.log(`[Cron] Catch-up: pushed webinar link to ${linkPushed} contacts`);
+    }
+
     return NextResponse.json({
       success: true,
       sent: totalSent,
       failed: totalFailed,
+      linkPushed,
       timestamp: now,
     });
 
