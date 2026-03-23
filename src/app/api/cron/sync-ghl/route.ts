@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const GHL_API = 'https://services.leadconnectorhq.com';
 const GHL_TOKEN = process.env.GHL_API_TOKEN || '';
@@ -98,14 +98,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'GHL credentials not configured' }, { status: 500 });
     }
 
-    // ?hours=N sets the lookback window (default: 1 hour, max: 168 = 7 days)
+    // ?all=true fetches ALL contacts (full sync); ?hours=N sets lookback window (default 1h, max 720 = 30 days)
     const { searchParams } = new URL(req.url);
-    const hoursBack = Math.min(parseInt(searchParams.get('hours') || '1', 10) || 1, 168);
-    const updatedAfter = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
-    console.log(`GHL Sync: fetching contacts updated in last ${hoursBack}h (since ${updatedAfter})`);
+    const fetchAll = searchParams.get('all') === 'true';
+    const hoursBack = Math.min(parseInt(searchParams.get('hours') || '1', 10) || 1, 720);
+    const updatedAfter = fetchAll ? undefined : new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
+    console.log(fetchAll ? 'GHL Sync: fetching ALL contacts' : `GHL Sync: fetching contacts updated in last ${hoursBack}h (since ${updatedAfter})`);
 
     const ghlContacts = await fetchGHLContacts(updatedAfter);
-    console.log(`GHL Sync: found ${ghlContacts.length} recently updated contacts`);
+    console.log(`GHL Sync: found ${ghlContacts.length} contacts`);
 
     let synced = 0;
     let created = 0;
@@ -191,9 +192,12 @@ export async function GET(req: Request) {
           }).then(() => {});
         }
 
-        // Trigger automations for new tags
+        // Auto-register new tags in tag_definitions + trigger automations
         if (tagsChanged) {
           const newTags = tags.filter(t => !(existing.tags || []).includes(t));
+          for (const tag of newTags) {
+            await supabase.from('tag_definitions').upsert({ name: tag }, { onConflict: 'name' });
+          }
           if (newTags.length > 0) {
             const { processAutomations } = await import('@/lib/automation-engine');
             for (const tag of newTags) {
@@ -227,6 +231,11 @@ export async function GET(req: Request) {
           console.error(`GHL Sync: failed to create contact ${email}:`, error.message);
           skipped++;
           continue;
+        }
+
+        // Auto-register tags in tag_definitions
+        for (const tag of tags) {
+          await supabase.from('tag_definitions').upsert({ name: tag }, { onConflict: 'name' });
         }
 
         supabase.from('contact_history').insert({
