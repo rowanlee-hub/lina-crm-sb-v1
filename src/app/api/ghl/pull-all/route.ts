@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { syncWebinarTagAndDate } from '@/lib/webinar-utils';
 
 // Supports both GHL API v1 (rest.gohighlevel.com) and v2 (services.leadconnectorhq.com)
 // v1 uses a simple location-level API key; v2 uses PITs with location token exchange.
@@ -62,20 +63,12 @@ async function upsertContact(c: any): Promise<'created' | 'updated' | 'skipped'>
   // Normalise webinar tags: webinar0325 → webinar-0325
   tags = tags.map(t => t.replace(/^webinar(\d{4})$/, 'webinar-$1'));
 
-  // Determine webinar date from webinar-MMDD tags (pick latest)
-  const year = new Date().getFullYear();
-  const webinarDateTags = tags
-    .filter((t: string) => /^webinar-\d{4}$/.test(t))
-    .map((t: string) => {
-      const mmdd = t.replace('webinar-', '');
-      return `${year}-${mmdd.substring(0, 2)}-${mmdd.substring(2, 4)}`;
-    })
-    .sort();
+  // Sync webinar tag ↔ date (always resolves to nearest Wednesday)
+  const synced = syncWebinarTagAndDate(tags, null);
+  tags = synced.tags;
+  let webinar_date: string | null = synced.webinar_date;
 
-  let webinar_date: string | null = null;
-  if (webinarDateTags.length > 0) {
-    webinar_date = webinarDateTags[webinarDateTags.length - 1];
-  } else {
+  if (!webinar_date) {
     const { data: setting } = await supabase.from('settings').select('value').eq('key', 'active_webinar_date').single();
     webinar_date = setting?.value || null;
   }
@@ -107,14 +100,15 @@ async function upsertContact(c: any): Promise<'created' | 'updated' | 'skipped'>
 
   if (existing) {
     const mergedTags = [...new Set([...(existing.tags || []), ...tags])];
+    const merged = syncWebinarTagAndDate(mergedTags, webinar_date || existing.webinar_date);
     const { error } = await supabase.from('contacts').update({
       name: name || existing.name,
       email: email || existing.email,
       phone: phone || existing.phone,
       ghl_contact_id: ghlId || existing.ghl_contact_id,
       uid: uid || existing.uid || '',
-      webinar_date: webinar_date || existing.webinar_date,
-      tags: mergedTags,
+      webinar_date: merged.webinar_date || existing.webinar_date,
+      tags: merged.tags,
       signup_day: existing.signup_day ?? dayOfWeek,
       updated_at: now,
     }).eq('id', existing.id);

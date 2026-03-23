@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { syncWebinarTagAndDate } from '@/lib/webinar-utils';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -26,18 +27,7 @@ function parseWebinarDate(raw: string): string | null {
   return null;
 }
 
-// Determine webinar date from tags (webinar-MMDD → latest date)
-function webinarDateFromTags(tags: string[]): string | null {
-  const year = new Date().getFullYear();
-  const dates = tags
-    .filter(t => /^webinar-\d{4}$/.test(t))
-    .map(t => {
-      const mmdd = t.replace('webinar-', '');
-      return `${year}-${mmdd.substring(0, 2)}-${mmdd.substring(2, 4)}`;
-    })
-    .sort();
-  return dates.length > 0 ? dates[dates.length - 1] : null;
-}
+// webinarDateFromTags is now in webinar-utils.ts as latestWebinarDateFromTags
 
 async function fetchGHLContacts(updatedAfter?: string): Promise<any[]> {
   const all: any[] = [];
@@ -117,15 +107,17 @@ export async function GET(req: Request) {
       const email = ghl.email || '';
       const phone = ghl.phone || '';
       const name = ghl.contactName || `${ghl.firstName || ''} ${ghl.lastName || ''}`.trim() || '';
-      const tags: string[] = (ghl.tags || []).map((t: string) => t.replace(/^webinar(\d{4})$/, 'webinar-$1'));
+      let tags: string[] = (ghl.tags || []).map((t: string) => t.replace(/^webinar(\d{4})$/, 'webinar-$1'));
       const customFields = ghl.customFields || [];
 
       const webinarLink = getCustomField(customFields, FIELD_WEBINAR_LINK);
       const webinarDateRaw = getCustomField(customFields, FIELD_WEBINAR_DATE);
       const uid = getCustomField(customFields, FIELD_UID);
 
-      // Determine webinar date: from tags first, then from custom field
-      const webinarDate = webinarDateFromTags(tags) || parseWebinarDate(webinarDateRaw);
+      // Sync webinar tag ↔ date (always nearest Wednesday)
+      const tagDateSync = syncWebinarTagAndDate(tags, parseWebinarDate(webinarDateRaw));
+      tags = tagDateSync.tags;
+      const webinarDate = tagDateSync.webinar_date;
 
       // Find existing contact in Lina
       let existing: any = null;
@@ -147,9 +139,10 @@ export async function GET(req: Request) {
       const now = new Date().toISOString();
 
       if (existing) {
-        // Merge tags (never remove, only add)
+        // Merge tags (never remove, only add) + sync webinar date
         const mergedTags = [...new Set([...(existing.tags || []), ...tags])];
-        const tagsChanged = mergedTags.length !== (existing.tags || []).length;
+        const merged = syncWebinarTagAndDate(mergedTags, webinarDate || existing.webinar_date?.substring(0, 10));
+        const tagsChanged = merged.tags.length !== (existing.tags || []).length || merged.tags.some(t => !(existing.tags || []).includes(t));
 
         const patch: Record<string, any> = { updated_at: now };
 
@@ -160,8 +153,8 @@ export async function GET(req: Request) {
         if (ghlId && ghlId !== existing.ghl_contact_id) patch.ghl_contact_id = ghlId;
         if (uid && uid !== (existing.uid || '')) patch.uid = uid;
         if (webinarLink && webinarLink !== existing.webinar_link) patch.webinar_link = webinarLink;
-        if (webinarDate && webinarDate !== existing.webinar_date?.substring(0, 10)) patch.webinar_date = webinarDate;
-        if (tagsChanged) patch.tags = mergedTags;
+        if (merged.webinar_date && merged.webinar_date !== existing.webinar_date?.substring(0, 10)) patch.webinar_date = merged.webinar_date;
+        if (tagsChanged) patch.tags = merged.tags;
 
         // Skip if nothing changed
         if (Object.keys(patch).length <= 1) {

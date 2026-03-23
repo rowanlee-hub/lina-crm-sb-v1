@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { syncWebinarTagAndDate } from '@/lib/webinar-utils';
 
 /**
  * GHL Webhook — Receives contact data from GoHighLevel workflows.
@@ -41,22 +42,13 @@ export async function POST(req: Request) {
     tags = tags.map(t => t.replace(/^webinar(\d{4})$/, 'webinar-$1'));
     console.log(`GHL Webhook [${email || ghlId}] rawTags:`, JSON.stringify(rawTags), '→ parsed:', JSON.stringify(tags));
 
-    // Determine webinar date:
-    // If contact has webinar-MMDD tag(s), pick the LATEST one to handle returning leads
-    // who have tags from multiple webinars (e.g. webinar-0318 + webinar-0325).
-    // Falls back to active_webinar_date from settings if no tag found.
-    let webinar_date: string | null = null;
-    const year = new Date().getFullYear();
-    const webinarDateTags = tags
-      .filter(t => /^webinar-\d{4}$/.test(t))
-      .map(t => {
-        const mmdd = t.replace('webinar-', '');
-        return `${year}-${mmdd.substring(0, 2)}-${mmdd.substring(2, 4)}`;
-      })
-      .sort();
-    if (webinarDateTags.length > 0) {
-      webinar_date = webinarDateTags[webinarDateTags.length - 1]; // latest date
-    } else {
+    // Sync webinar tag ↔ date (always resolves to nearest Wednesday)
+    const synced = syncWebinarTagAndDate(tags, null);
+    tags = synced.tags;
+    let webinar_date: string | null = synced.webinar_date;
+
+    // If no webinar tag found, fall back to active_webinar_date from settings
+    if (!webinar_date) {
       const { data: dateSetting } = await supabase
         .from('settings')
         .select('value')
@@ -93,9 +85,10 @@ export async function POST(req: Request) {
     const dayOfWeek = now.getDay();
 
     if (existingContact) {
-      // Update existing contact
+      // Update existing contact — sync tags ↔ webinar_date
       const mergedTags = [...new Set([...(existingContact.tags || []), ...(tags || [])])];
-      console.log(`GHL Webhook [${email || ghlId}] existing tags:`, JSON.stringify(existingContact.tags), '+ incoming:', JSON.stringify(tags), '= merged:', JSON.stringify(mergedTags));
+      const merged = syncWebinarTagAndDate(mergedTags, webinar_date || existingContact.webinar_date);
+      console.log(`GHL Webhook [${email || ghlId}] existing tags:`, JSON.stringify(existingContact.tags), '+ incoming:', JSON.stringify(tags), '= merged:', JSON.stringify(merged.tags));
       const { error: updateError } = await supabase.from('contacts').update({
         name: name || existingContact.name,
         email: email || existingContact.email,
@@ -103,8 +96,8 @@ export async function POST(req: Request) {
         ghl_contact_id: ghlId || existingContact.ghl_contact_id,
         uid: uid || existingContact.uid || '',
         webinar_link: webinar_link || existingContact.webinar_link,
-        webinar_date: webinar_date || existingContact.webinar_date,
-        tags: mergedTags,
+        webinar_date: merged.webinar_date || existingContact.webinar_date,
+        tags: merged.tags,
         signup_day: dayOfWeek,
         updated_at: now.toISOString(),
       }).eq('id', existingContact.id);

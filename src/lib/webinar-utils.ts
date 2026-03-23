@@ -33,6 +33,95 @@ export function getNextWebinarDate(): string {
 }
 
 /**
+ * Parse a webinar-MMDD tag into a YYYY-MM-DD date string.
+ * Always resolves to the nearest Wednesday matching that MMDD.
+ * Checks current year first, then next year (for Dec tags seen in Jan).
+ */
+export function webinarTagToDate(tag: string): string | null {
+  const match = tag.match(/^webinar-(\d{2})(\d{2})$/);
+  if (!match) return null;
+  const mm = parseInt(match[1], 10);
+  const dd = parseInt(match[2], 10);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+  const now = new Date();
+  const year = now.getFullYear();
+
+  // Try current year, then next year
+  for (const y of [year, year + 1]) {
+    const d = new Date(Date.UTC(y, mm - 1, dd));
+    // Validate the date is real (e.g. Feb 30 would roll over)
+    if (d.getUTCMonth() !== mm - 1 || d.getUTCDate() !== dd) continue;
+    // Find nearest Wednesday (day 3)
+    const day = d.getUTCDay();
+    const diff = (3 - day + 7) % 7;
+    // If already Wednesday, diff=0; otherwise snap forward to next Wed
+    // But if the tag date IS the intended webinar day, trust it even if not Wed
+    // (handles edge cases). Prefer snapping to nearest Wed within ±3 days.
+    const nearestDiff = diff <= 3 ? diff : diff - 7;
+    const wed = new Date(d.getTime() + nearestDiff * 24 * 60 * 60 * 1000);
+    const wy = wed.getUTCFullYear();
+    const wm = String(wed.getUTCMonth() + 1).padStart(2, '0');
+    const wd = String(wed.getUTCDate()).padStart(2, '0');
+    return `${wy}-${wm}-${wd}`;
+  }
+  return null;
+}
+
+/**
+ * Given an array of tags, find the latest webinar-MMDD tag and return its date.
+ */
+export function latestWebinarDateFromTags(tags: string[]): string | null {
+  const dates = tags
+    .map(t => webinarTagToDate(t))
+    .filter((d): d is string => d !== null)
+    .sort();
+  return dates.length > 0 ? dates[dates.length - 1] : null;
+}
+
+/**
+ * Build webinar tag from a YYYY-MM-DD date string.
+ * e.g. "2026-03-25" → "webinar-0325"
+ */
+export function dateToWebinarTag(date: string): string {
+  return `webinar-${date.substring(5, 7)}${date.substring(8, 10)}`;
+}
+
+/**
+ * Sync a contact's webinar_date and webinar tag to be consistent.
+ * Call this after tags or webinar_date change.
+ * - If contact has webinar-MMDD tag(s), sets webinar_date to the latest one (nearest Wednesday).
+ * - If contact has webinar_date but no matching tag, adds the tag.
+ * Returns the updated { tags, webinar_date } to use in the DB update.
+ */
+export function syncWebinarTagAndDate(
+  tags: string[],
+  webinarDate: string | null
+): { tags: string[]; webinar_date: string | null } {
+  const dateFromTag = latestWebinarDateFromTags(tags);
+
+  if (dateFromTag) {
+    // Tag is source of truth — set webinar_date to match
+    const expectedTag = dateToWebinarTag(dateFromTag);
+    const updatedTags = [...tags];
+    if (!updatedTags.includes(expectedTag)) updatedTags.push(expectedTag);
+    return { tags: updatedTags, webinar_date: dateFromTag };
+  }
+
+  if (webinarDate) {
+    // Has date but no tag — add the tag
+    const tag = dateToWebinarTag(webinarDate);
+    const updatedTags = [...tags];
+    if (!updatedTags.includes(tag)) updatedTags.push(tag);
+    // Snap to nearest Wednesday
+    const snapped = webinarTagToDate(tag);
+    return { tags: updatedTags, webinar_date: snapped || webinarDate };
+  }
+
+  return { tags, webinar_date: null };
+}
+
+/**
  * Send a LINE push message to a user. Returns true if successful.
  */
 export async function sendLinePushMessage(lineId: string, message: string): Promise<boolean> {
