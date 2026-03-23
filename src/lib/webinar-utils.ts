@@ -90,32 +90,34 @@ export function dateToWebinarTag(date: string): string {
 /**
  * Sync a contact's webinar_date and webinar tag to be consistent.
  * Call this after tags or webinar_date change.
- * - If contact has webinar-MMDD tag(s), sets webinar_date to the latest one (nearest Wednesday).
- * - If contact has webinar_date but no matching tag, adds the tag.
- * Returns the updated { tags, webinar_date } to use in the DB update.
+ *
+ * Priority:
+ * 1. If webinar_date is already set → keep it, ensure matching tag exists
+ * 2. If only tag exists (no date) → resolve tag to nearest Wednesday (current year)
+ * 3. Neither → return as-is
+ *
+ * This order prevents year-crossing bugs: a tag like webinar-0325 has no year,
+ * so we only resolve it when the date is first set (not on every read).
  */
 export function syncWebinarTagAndDate(
   tags: string[],
   webinarDate: string | null
 ): { tags: string[]; webinar_date: string | null } {
-  const dateFromTag = latestWebinarDateFromTags(tags);
-
-  if (dateFromTag) {
-    // Tag is source of truth — set webinar_date to match
-    const expectedTag = dateToWebinarTag(dateFromTag);
-    const updatedTags = [...tags];
-    if (!updatedTags.includes(expectedTag)) updatedTags.push(expectedTag);
-    return { tags: updatedTags, webinar_date: dateFromTag };
-  }
+  const updatedTags = [...tags];
 
   if (webinarDate) {
-    // Has date but no tag — add the tag
-    const tag = dateToWebinarTag(webinarDate);
-    const updatedTags = [...tags];
-    if (!updatedTags.includes(tag)) updatedTags.push(tag);
-    // Snap to nearest Wednesday
-    const snapped = webinarTagToDate(tag);
-    return { tags: updatedTags, webinar_date: snapped || webinarDate };
+    // Date exists — ensure matching tag is present
+    const expectedTag = dateToWebinarTag(webinarDate);
+    if (!updatedTags.includes(expectedTag)) updatedTags.push(expectedTag);
+    return { tags: updatedTags, webinar_date: webinarDate };
+  }
+
+  // No date — try to derive from tag (only for new contacts without a date yet)
+  const dateFromTag = latestWebinarDateFromTags(tags);
+  if (dateFromTag) {
+    const expectedTag = dateToWebinarTag(dateFromTag);
+    if (!updatedTags.includes(expectedTag)) updatedTags.push(expectedTag);
+    return { tags: updatedTags, webinar_date: dateFromTag };
   }
 
   return { tags, webinar_date: null };
